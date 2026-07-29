@@ -3,7 +3,10 @@ import os
 import json
 import urllib.request
 import urllib.error
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Bangladesh timezone (GMT+6)
+BD_TZ = timezone(timedelta(hours=6))
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from dotenv import load_dotenv
@@ -175,7 +178,7 @@ last_replied: dict = {}
 
 
 def get_auto_reply():
-    now = datetime.now()
+    now = datetime.now(BD_TZ)
     # সকাল ৯:০০ থেকে রাত ৯:০০ → Busy
     # বাকি সময় → Sleep
     start = now.replace(hour=9, minute=0, second=0, microsecond=0)
@@ -222,14 +225,14 @@ async def incoming_handler(event):
         return
 
     # ১ ঘণ্টার মধ্যে আগে reply দিয়ে থাকলে আবার দেবে না
-    now = datetime.now().timestamp()
+    now = datetime.now(BD_TZ).timestamp()
     last = last_replied.get(sender_id, 0)
     if now - last < REPLY_COOLDOWN:
         print(f"⏸ Cooldown active: {sender.first_name} [ID: {sender_id}]")
         return
 
     reply_msg = get_auto_reply()
-    now_dt = datetime.now()
+    now_dt = datetime.now(BD_TZ)
     start = now_dt.replace(hour=9, minute=0, second=0, microsecond=0)
     end = now_dt.replace(hour=21, minute=0, second=0, microsecond=0)
     mode = "🌞 Day" if start <= now_dt < end else "🌙 Sleep"
@@ -333,7 +336,7 @@ def handle_group_message(token, msg, owner_id):
                 "name": sender_mention,
                 "waiting": True,
                 "msg_id": msg_id,
-                "time": datetime.now().timestamp()
+                "time": datetime.now(BD_TZ).timestamp()
             }
             tg_api(token, "sendMessage", {
                 "chat_id": chat_id,
@@ -381,7 +384,7 @@ def handle_group_message(token, msg, owner_id):
                 "chat_id": chat_id,
                 "name": info["name"],
                 "problem": problem_text,
-                "time": datetime.now().timestamp()
+                "time": datetime.now(BD_TZ).timestamp()
             }
             del problem_tracking[sender_id]
             print(f"🆘 Problem: {sender_name} → {problem_text[:30]}")
@@ -437,7 +440,7 @@ def handle_owner_fix(token, msg, owner_id):
 async def timeout_loop(token):
     while True:
         await asyncio.sleep(30)
-        now = datetime.now().timestamp()
+        now = datetime.now(BD_TZ).timestamp()
         for uid in [u for u, i in list(pending_problems.items())
                     if now - i["time"] >= OWNER_REPLY_TIMEOUT]:
             info = pending_problems.pop(uid, None)
@@ -465,7 +468,7 @@ async def timeout_loop(token):
 async def reminder_loop(token):
     """প্রতি ঘণ্টায় (সকাল ৯:০০ - রাত ৯:০০) group এ reminder পাঠাও"""
     while True:
-        now = datetime.now()
+        now = datetime.now(BD_TZ)
         # পরবর্তী পুরো ঘণ্টা পর্যন্ত wait করো
         next_hour = now.replace(minute=0, second=0, microsecond=0)
         if next_hour <= now:
@@ -475,7 +478,7 @@ async def reminder_loop(token):
         wait_sec = (next_hour - now).total_seconds()
         await asyncio.sleep(wait_sec)
 
-        now = datetime.now()
+        now = datetime.now(BD_TZ)
         open_time = now.replace(hour=GROUP_OPEN_HOUR, minute=GROUP_OPEN_MINUTE, second=0, microsecond=0)
         close_time = now.replace(hour=GROUP_CLOSE_HOUR, minute=GROUP_CLOSE_MINUTE, second=0, microsecond=0)
 
@@ -516,7 +519,7 @@ async def group_lock_unlock_loop(token):
     print("⏰ Group lock/unlock loop started!")
 
     while True:
-        now = datetime.now()
+        now = datetime.now(BD_TZ)
         open_time = now.replace(hour=GROUP_OPEN_HOUR, minute=GROUP_OPEN_MINUTE, second=0, microsecond=0)
         close_time = now.replace(hour=GROUP_CLOSE_HOUR, minute=GROUP_CLOSE_MINUTE, second=0, microsecond=0)
 
