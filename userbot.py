@@ -10,6 +10,26 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Group chats persistence
+GROUP_CHATS_FILE = "group_chats.json"
+
+def load_group_chats() -> set:
+    if os.path.exists(GROUP_CHATS_FILE):
+        try:
+            with open(GROUP_CHATS_FILE, "r") as f:
+                return set(json.load(f))
+        except Exception as e:
+            print(f"⚠️ Error loading group chats: {e}")
+    return set()
+
+def save_group_chats():
+    try:
+        with open(GROUP_CHATS_FILE, "w") as f:
+            json.dump(list(group_chat_ids), f)
+    except Exception as e:
+        print(f"⚠️ Error saving group chats: {e}")
+
+
 # ============================================================
 # ⚙️ CONFIG
 # ============================================================
@@ -137,7 +157,7 @@ owner_replied: set = set()
 idle_timers: dict = {}
 problem_tracking: dict = {}
 pending_problems: dict = {}
-group_chat_ids: set = set()
+group_chat_ids: set = load_group_chats()
 # last_replied: {user_id: timestamp} — শেষবার কখন reply দিয়েছি
 last_replied: dict = {}
 
@@ -242,7 +262,9 @@ def handle_group_message(token, msg, owner_id):
     if chat_type not in ["group", "supergroup"]:
         return
 
-    group_chat_ids.add(chat_id)
+    if chat_id not in group_chat_ids:
+        group_chat_ids.add(chat_id)
+        save_group_chats()
 
     msg_id = msg.get("message_id")
     sender = msg.get("from", {})
@@ -478,7 +500,76 @@ async def reminder_loop(token):
 async def group_lock_unlock_loop(token):
     """রাত ৯:০০ এ group lock, সকাল ৯:০০ এ unlock
     Owner আগে open করলেও bot বন্ধ করে দেবে"""
-    group_was_locked = False  # track করো group locked আছে কিনা
+    now = datetime.now()
+    open_time = now.replace(hour=GROUP_OPEN_HOUR, minute=GROUP_OPEN_MINUTE, second=0, microsecond=0)
+    close_time = now.replace(hour=GROUP_CLOSE_HOUR, minute=GROUP_CLOSE_MINUTE, second=0, microsecond=0)
+    is_night_start = not (open_time <= now < close_time)
+
+    # Initialize group_was_locked based on current time
+    group_was_locked = is_night_start
+
+    # On startup, check all groups and align their status
+    for gid in list(group_chat_ids):
+        chat_info = tg_api(token, "getChat", {"chat_id": gid})
+        if chat_info.get("ok"):
+            perms = chat_info.get("result", {}).get("permissions", {})
+            can_send = perms.get("can_send_messages", True)
+
+            if is_night_start and can_send:
+                # রাতের সময় কিন্তু গ্রুপ খোলা → লক করো
+                result = tg_api(token, "setChatPermissions", {
+                    "chat_id": gid,
+                    "permissions": {
+                        "can_send_messages": False,
+                        "can_send_audios": False,
+                        "can_send_documents": False,
+                        "can_send_photos": False,
+                        "can_send_videos": False,
+                        "can_send_video_notes": False,
+                        "can_send_voice_notes": False,
+                        "can_send_polls": False,
+                        "can_send_other_messages": False,
+                        "can_add_web_page_previews": False
+                    }
+                })
+                if result.get("ok"):
+                    print(f"🔒 Startup: Group auto-locked: {gid}")
+            elif not is_night_start and not can_send:
+                # দিনের সময় কিন্তু গ্রুপ বন্ধ → আনলক করো এবং গুড মর্নিং মেসেজ দাও
+                open_msg = (
+                    "╔══════════════════════╗\n"
+                    "║   🌅  GOOD MORNING!      ║\n"
+                    "╚══════════════════════╝\n\n"
+                    "হ্যালো সবাই! 👋 শুভ সকাল! ☀️\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n"
+                    "🔓 Group আবার চালু হয়েছে!\n"
+                    "✅ Admin এখন active আছেন\n"
+                    "💬 এখন message করতে পারবেন\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "❓ কারো কোনো সমস্যা আছে?\n"
+                    "💬 নির্দ্বিধায় জানান\n"
+                    "🛠️ সমাধান করে দেওয়া হবে!\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n"
+                    f"{BOT_SIGNATURE}"
+                )
+                result = tg_api(token, "setChatPermissions", {
+                    "chat_id": gid,
+                    "permissions": {
+                        "can_send_messages": True,
+                        "can_send_audios": True,
+                        "can_send_documents": True,
+                        "can_send_photos": True,
+                        "can_send_videos": True,
+                        "can_send_video_notes": True,
+                        "can_send_voice_notes": False,
+                        "can_send_polls": True,
+                        "can_send_other_messages": True,
+                        "can_add_web_page_previews": True
+                    }
+                })
+                if result.get("ok"):
+                    tg_api(token, "sendMessage", {"chat_id": gid, "text": open_msg})
+                    print(f"🔓 Startup: Group unlocked: {gid}")
 
     while True:
         await asyncio.sleep(30)
@@ -629,7 +720,9 @@ async def welcome_bot_loop():
                     if os_ in ["left", "kicked"] and ns in ["member", "administrator", "creator"]:
                         member = cm["new_chat_member"]["user"]
                         cid = cm["chat"]["id"]
-                        group_chat_ids.add(cid)
+                        if cid not in group_chat_ids:
+                            group_chat_ids.add(cid)
+                            save_group_chats()
                         first = member.get("first_name", "")
                         last = member.get("last_name", "")
                         full_name = (first + " " + last).strip() or "বন্ধু"
