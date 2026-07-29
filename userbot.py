@@ -158,6 +158,18 @@ idle_timers: dict = {}
 problem_tracking: dict = {}
 pending_problems: dict = {}
 group_chat_ids: set = load_group_chats()
+
+# Env থেকে গ্রুপ আইডি লোড করা (সার্ভার রিস্টার্ট হলেও যাতে গ্রুপ আইডি হারিয়ে না যায়)
+env_group_ids = os.getenv("GROUP_CHAT_IDS", "")
+if env_group_ids:
+    for gid_str in env_group_ids.split(","):
+        try:
+            group_chat_ids.add(int(gid_str.strip()))
+        except ValueError:
+            pass
+
+print(f"📁 Loaded Group IDs: {list(group_chat_ids)}")
+
 # last_replied: {user_id: timestamp} — শেষবার কখন reply দিয়েছি
 last_replied: dict = {}
 
