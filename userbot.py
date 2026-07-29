@@ -476,18 +476,22 @@ async def reminder_loop(token):
 
 
 async def group_lock_unlock_loop(token):
-    """রাত ৯:৩০ এ group lock, সকাল ৮:৩০ এ unlock"""
-    while True:
-        await asyncio.sleep(30)  # প্রতি ৩০ সেকেন্ডে check
-        now = datetime.now()
-        hour = now.hour
-        minute = now.minute
+    """রাত ৯:৩০ এ group lock, সকাল ৮:৩০ এ unlock
+    Owner আগে open করলেও bot বন্ধ করে দেবে"""
+    group_was_locked = False  # track করো group locked আছে কিনা
 
-        # রাত ৯:৩০ → group lock (messaging বন্ধ)
-        if hour == GROUP_CLOSE_HOUR and minute == GROUP_CLOSE_MINUTE:
+    while True:
+        await asyncio.sleep(30)
+        now = datetime.now()
+        open_time = now.replace(hour=GROUP_OPEN_HOUR, minute=GROUP_OPEN_MINUTE, second=0, microsecond=0)
+        close_time = now.replace(hour=GROUP_CLOSE_HOUR, minute=GROUP_CLOSE_MINUTE, second=0, microsecond=0)
+
+        is_night = not (open_time <= now < close_time)  # রাতের সময়
+
+        if is_night and not group_was_locked:
+            # রাতের সময় → lock করো
             for gid in list(group_chat_ids):
-                # সব member এর messaging permission বন্ধ
-                tg_api(token, "setChatPermissions", {
+                result = tg_api(token, "setChatPermissions", {
                     "chat_id": gid,
                     "permissions": {
                         "can_send_messages": False,
@@ -502,11 +506,12 @@ async def group_lock_unlock_loop(token):
                         "can_add_web_page_previews": False
                     }
                 })
-                print(f"🔒 Group locked: {gid}")
-            await asyncio.sleep(60)  # ১ মিনিট wait করো duplicate avoid এর জন্য
+                if result.get("ok"):
+                    print(f"🔒 Group locked: {gid}")
+            group_was_locked = True
 
-        # সকাল ৮:৩০ → group unlock (messaging চালু)
-        elif hour == GROUP_OPEN_HOUR and minute == GROUP_OPEN_MINUTE:
+        elif not is_night and group_was_locked:
+            # সকালের সময় → unlock করো
             open_msg = (
                 "╔══════════════════════╗\n"
                 "║   🌅  GOOD MORNING!      ║\n"
@@ -524,8 +529,7 @@ async def group_lock_unlock_loop(token):
                 f"{BOT_SIGNATURE}"
             )
             for gid in list(group_chat_ids):
-                # সব member এর messaging permission চালু
-                tg_api(token, "setChatPermissions", {
+                result = tg_api(token, "setChatPermissions", {
                     "chat_id": gid,
                     "permissions": {
                         "can_send_messages": True,
@@ -534,15 +538,16 @@ async def group_lock_unlock_loop(token):
                         "can_send_photos": True,
                         "can_send_videos": True,
                         "can_send_video_notes": True,
-                        "can_send_voice_notes": False,  # voice সবসময় বন্ধ
+                        "can_send_voice_notes": False,
                         "can_send_polls": True,
                         "can_send_other_messages": True,
                         "can_add_web_page_previews": True
                     }
                 })
-                tg_api(token, "sendMessage", {"chat_id": gid, "text": open_msg})
-                print(f"🔓 Group unlocked: {gid}")
-            await asyncio.sleep(60)
+                if result.get("ok"):
+                    tg_api(token, "sendMessage", {"chat_id": gid, "text": open_msg})
+                    print(f"🔓 Group unlocked: {gid}")
+            group_was_locked = False
 
 
 async def welcome_bot_loop():
