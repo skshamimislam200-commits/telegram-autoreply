@@ -22,6 +22,8 @@ OWNER_ID = int(os.getenv("OWNER_ID", "7918793670"))
 GROUP_REMINDER_INTERVAL = 5 * 60 * 60  # ৫ ঘণ্টা
 OWNER_REPLY_TIMEOUT = 10 * 60           # ১০ মিনিট
 
+BOT_SIGNATURE = "『 �𝗗 �𝗦𝗛𝗔��� 🖤 』"
+
 # ============================================================
 # 🚫 BAD WORDS LIST
 # ============================================================
@@ -59,7 +61,7 @@ BUSY_MESSAGE = (
     "   আপনাকে reply করা হবে\n"
     "━━━━━━━━━━━━━━━━━━━━\n\n"
     "💙 ধৈর্য ধরার জন্য ধন্যবাদ! 🙏\n\n"
-    "『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
+    "『 ����� � 🖤 』"
 )
 
 SLEEP_MESSAGE = (
@@ -76,7 +78,7 @@ SLEEP_MESSAGE = (
     "   reply দেওয়া হবে\n"
     "━━━━━━━━━━━━━━━━━━━━\n\n"
     "🌟 শুভ রাত্রি! 🙏\n\n"
-    "『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
+    "『 ����� � 🖤 』"
 )
 
 WELCOME_MESSAGE = (
@@ -94,7 +96,7 @@ WELCOME_MESSAGE = (
     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     "আশা করি এখানে ভালো লাগবে! 😊\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    "『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
+    "『 ����� � 🖤 』"
 )
 
 REMINDER_MESSAGE = (
@@ -107,7 +109,7 @@ REMINDER_MESSAGE = (
     "💬 থাকলে এখানে জানান\n"
     "🛠️ Admin সমাধান করে দেবেন!\n"
     "━━━━━━━━━━━━━━━━━━━━\n\n"
-    "『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
+    "『 ����� � 🖤 』"
 )
 
 WAIT_SECONDS = 300
@@ -122,14 +124,8 @@ else:
 
 owner_replied: set = set()
 idle_timers: dict = {}
-
-# problem_tracking: {user_id: {chat_id, name, waiting, msg_id, time}}
 problem_tracking: dict = {}
-
-# pending_problems: {user_id: {chat_id, name, problem, time}}
-# owner ১০ মিনিটে fix না করলে auto reply যাবে
 pending_problems: dict = {}
-
 group_chat_ids: set = set()
 
 
@@ -165,7 +161,7 @@ def reset_idle_timer(user_id):
 
 
 # ============================================================
-# 📨 PRIVATE MESSAGE HANDLERS (userbot)
+# 📨 PRIVATE MESSAGE HANDLERS
 # ============================================================
 @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
 async def incoming_handler(event):
@@ -226,7 +222,7 @@ def handle_group_message(token, msg, owner_id):
     sender_mention = f"@{sender_username}" if sender_username else sender_name
     text = msg.get("text", "") or msg.get("caption", "") or ""
 
-    # ── Voice delete ──
+    # Voice delete
     if msg.get("voice") or msg.get("video_note"):
         tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
         tg_api(token, "sendMessage", {
@@ -235,13 +231,14 @@ def handle_group_message(token, msg, owner_id):
                 f"🚫 {sender_mention} এর voice message delete করা হয়েছে!\n"
                 f"━━━━━━━━━━━━━━━━\n"
                 f"⚠️ এই group এ voice message নিষিদ্ধ।\n"
-                f"💬 Text এ লিখুন।"
+                f"💬 Text এ লিখুন।\n\n"
+                f"{BOT_SIGNATURE}"
             )
         })
         print(f"🗑️ Voice deleted: {sender_name}")
         return
 
-    # ── Bad word delete ──
+    # Bad word delete
     if contains_bad_word(text):
         tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
         tg_api(token, "sendMessage", {
@@ -250,13 +247,14 @@ def handle_group_message(token, msg, owner_id):
                 f"⛔ {sender_mention} এর message delete করা হয়েছে!\n"
                 f"━━━━━━━━━━━━━━━━\n"
                 f"🚫 অশ্লীল শব্দ ব্যবহার নিষিদ্ধ।\n"
-                f"✅ ভদ্রভাবে কথা বলুন।"
+                f"✅ ভদ্রভাবে কথা বলুন।\n\n"
+                f"{BOT_SIGNATURE}"
             )
         })
         print(f"🗑️ Bad word deleted: {sender_name}")
         return
 
-    # ── Problem detection ──
+    # Problem detection
     problem_keywords = [
         "সমস্যা", "problem", "plm", "help", "হেল্প",
         "সাহায্য", "pls", "please", "issue", "fix",
@@ -278,21 +276,21 @@ def handle_group_message(token, msg, owner_id):
                 "text": (
                     f"🤝 {sender_mention} আপনার সমস্যার কথা শুনলাম!\n"
                     f"━━━━━━━━━━━━━━━━\n"
-                    f"💬 একটু বিস্তারিত বলুন — কী সমস্যা হচ্ছে?\n"
-                    f"🛠️ Admin শীঘ্রই সমাধান দেবেন।"
+                    f"💬 একটু বিস্তারিত বলুন — কী সমস্যা?\n"
+                    f"🛠️ Admin শীঘ্রই সমাধান দেবেন।\n\n"
+                    f"{BOT_SIGNATURE}"
                 ),
                 "reply_to_message_id": msg_id
             })
         return
 
-    # ── Problem details (waiting state) ──
+    # Problem details (waiting state)
     if sender_id and sender_id in problem_tracking:
         info = problem_tracking[sender_id]
         if info.get("waiting"):
             problem_tracking[sender_id]["waiting"] = False
             problem_text = text
 
-            # Owner কে private message
             tg_api(token, "sendMessage", {
                 "chat_id": owner_id,
                 "text": (
@@ -302,26 +300,25 @@ def handle_group_message(token, msg, owner_id):
                     f"💬 সমস্যা: {problem_text}\n"
                     f"🏠 Group ID: {chat_id}\n"
                     f"━━━━━━━━━━━━━━━━\n"
-                    f"⏰ ১০ মিনিটের মধ্যে reply না করলে\n"
-                    f"bot automatically group এ জানাবে।\n"
+                    f"⏰ ১০ মিনিটে reply না করলে\n"
+                    f"bot auto message পাঠাবে।\n"
                     f"━━━━━━━━━━━━━━━━\n"
                     f"✏️ Fix করতে লিখুন:\n"
                     f"/fix {sender_id} আপনার সমাধান"
                 )
             })
 
-            # Group এ confirm
             tg_api(token, "sendMessage", {
                 "chat_id": chat_id,
                 "text": (
                     f"✅ {info['name']} আপনার সমস্যা Admin কে জানানো হয়েছে!\n"
                     f"━━━━━━━━━━━━━━━━\n"
-                    f"⏳ শীঘ্রই সমাধান দেওয়া হবে।"
+                    f"⏳ শীঘ্রই সমাধান দেওয়া হবে।\n\n"
+                    f"{BOT_SIGNATURE}"
                 ),
                 "reply_to_message_id": msg_id
             })
 
-            # pending_problems এ রাখো (১০ মিনিট timeout)
             pending_problems[sender_id] = {
                 "chat_id": chat_id,
                 "name": info["name"],
@@ -333,7 +330,7 @@ def handle_group_message(token, msg, owner_id):
             print(f"🆘 Problem reported: {sender_name} → {problem_text[:30]}")
         return
 
-    # ── Owner mention (? দিয়ে শেষ) ──
+    # Owner mention (? দিয়ে শেষ)
     if text and text.strip().endswith("?"):
         tg_api(token, "sendMessage", {
             "chat_id": chat_id,
@@ -346,7 +343,6 @@ def handle_group_message(token, msg, owner_id):
 
 
 def handle_owner_fix(token, msg, owner_id):
-    """Owner এর /fix command"""
     text = msg.get("text", "")
     if not text.startswith("/fix"):
         return False
@@ -371,10 +367,8 @@ def handle_owner_fix(token, msg, owner_id):
     except ValueError:
         return False
 
-    # pending থেকে সরাও
     pending_problems.pop(target_user_id, None)
 
-    # সব group এ fix message পাঠাও
     for gid in group_chat_ids:
         tg_api(token, "sendMessage", {
             "chat_id": gid,
@@ -386,7 +380,7 @@ def handle_owner_fix(token, msg, owner_id):
                 f"💡 {fix_message}\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"আর সমস্যা হলে জানাবেন! 😊\n\n"
-                f"『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
+                f"{BOT_SIGNATURE}"
             ),
             "parse_mode": "Markdown"
         })
@@ -400,16 +394,17 @@ def handle_owner_fix(token, msg, owner_id):
 
 
 async def pending_problem_timeout_loop(token):
-    """১০ মিনিটে owner reply না করলে auto message"""
     while True:
-        await asyncio.sleep(30)  # প্রতি ৩০ সেকেন্ডে check
+        await asyncio.sleep(30)
         now = datetime.now().timestamp()
         expired = [
-            uid for uid, info in pending_problems.items()
+            uid for uid, info in list(pending_problems.items())
             if now - info["time"] >= OWNER_REPLY_TIMEOUT
         ]
         for uid in expired:
-            info = pending_problems.pop(uid)
+            info = pending_problems.pop(uid, None)
+            if not info:
+                continue
             chat_id = info["chat_id"]
             name = info["name"]
             tg_api(token, "sendMessage", {
@@ -421,19 +416,18 @@ async def pending_problem_timeout_loop(token):
                     f"হ্যালো {name}! 👋\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
                     f"🔴 Owner এখন busy আছেন\n"
-                    f"⏳ আপনার সমস্যাটি noted হয়েছে\n"
-                    f"🛠️ যত তাড়াতাড়ি সম্ভব fix\n"
-                    f"   করে দেওয়া হবে!\n"
+                    f"⏳ আপনার সমস্যা noted হয়েছে\n"
+                    f"🛠️ যত তাড়াতাড়ি সম্ভব\n"
+                    f"   fix করে দেওয়া হবে!\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"অপেক্ষার জন্য ধন্যবাদ! 🙏\n\n"
-                    f"『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
+                    f"{BOT_SIGNATURE}"
                 )
             })
-            print(f"⏰ Auto reply sent (10min timeout): {name}")
+            print(f"⏰ Auto reply (10min): {name}")
 
 
 async def group_reminder_loop(token):
-    """৫ ঘণ্টা পর পর group reminder"""
     await asyncio.sleep(GROUP_REMINDER_INTERVAL)
     while True:
         for gid in list(group_chat_ids):
@@ -450,18 +444,16 @@ async def welcome_bot_loop():
         print("⚠️ WELCOME_BOT_TOKEN নেই — Welcome bot বন্ধ")
         return
 
-    print("🎉 Welcome Bot চালু!")
+    print("🎉 Shadow X Bot চালু!")
     print("🚫 Bad word filter চালু!")
     print("🗑️ Voice delete চালু!")
     print("🆘 Problem tracking চালু!")
-    print("⏰ 10min timeout auto-reply চালু!")
-    print("🔔 Group reminder চালু! (৫ ঘণ্টা)")
+    print("⏰ 10min timeout চালু!")
+    print("🔔 5hr reminder চালু!")
 
-    # Conflict clear
     tg_api(WELCOME_BOT_TOKEN, "getUpdates", {"offset": -1, "limit": 1, "timeout": 0})
     await asyncio.sleep(2)
 
-    # Background tasks
     asyncio.create_task(group_reminder_loop(WELCOME_BOT_TOKEN))
     asyncio.create_task(pending_problem_timeout_loop(WELCOME_BOT_TOKEN))
 
@@ -486,7 +478,6 @@ async def welcome_bot_loop():
                     chat_type = msg.get("chat", {}).get("type", "")
                     sender_id = msg.get("from", {}).get("id")
 
-                    # Owner private message
                     if chat_type == "private" and sender_id == OWNER_ID:
                         if not handle_owner_fix(WELCOME_BOT_TOKEN, msg, OWNER_ID):
                             if msg.get("text") == "/start":
@@ -494,7 +485,7 @@ async def welcome_bot_loop():
                                     "chat_id": msg["chat"]["id"],
                                     "text": (
                                         "╔══════════════════╗\n"
-                                        "║  🤖 Shamim Bot চালু!  ║\n"
+                                        "║  🖤 SHADOW X চালু!   ║\n"
                                         "╚══════════════════╝\n\n"
                                         "✅ সব feature চালু:\n"
                                         "🎉 Welcome message\n"
@@ -504,15 +495,14 @@ async def welcome_bot_loop():
                                         "⏰ 10min auto-reply\n"
                                         "🔔 5hr reminder\n\n"
                                         "🛠️ Fix format:\n"
-                                        "/fix [user_id] [সমাধান]"
+                                        "/fix [user_id] [সমাধান]\n\n"
+                                        f"{BOT_SIGNATURE}"
                                     )
                                 })
 
-                    # Group message
                     elif chat_type in ["group", "supergroup"]:
                         handle_group_message(WELCOME_BOT_TOKEN, msg, OWNER_ID)
 
-                # নতুন member join
                 cm = update.get("chat_member")
                 if cm:
                     old_s = cm["old_chat_member"]["status"]
