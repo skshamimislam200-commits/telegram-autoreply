@@ -22,11 +22,11 @@ OWNER_ID = int(os.getenv("OWNER_ID", "7918793670"))
 GROUP_REMINDER_INTERVAL = 60 * 60  # প্রতি ১ ঘণ্টায় reminder
 OWNER_REPLY_TIMEOUT = 10 * 60      # 10 minutes
 
-# Group active time: সকাল ৮:৩০ - রাত ৯:৩০
-GROUP_OPEN_HOUR = 8
-GROUP_OPEN_MINUTE = 30
+# Group active time: সকাল ৯:০০ - রাত ৯:০০
+GROUP_OPEN_HOUR = 9
+GROUP_OPEN_MINUTE = 0
 GROUP_CLOSE_HOUR = 21
-GROUP_CLOSE_MINUTE = 30
+GROUP_CLOSE_MINUTE = 0
 
 BOT_SIGNATURE = "[ DEVELOPER SHAMIM ]"
 
@@ -84,7 +84,7 @@ SLEEP_MESSAGE = (
     "└─────────────────────┘\n\n"
     "🌛 রাতের বিশ্রাম চলছে...\n"
     "━━━━━━━━━━━━━━━━━━━━\n"
-    "⏰ আগামীকাল সকাল ৮:৩০ এ\n"
+    "⏰ আগামীকাল সকাল ৯:০০ এ\n"
     "   আপনাকে reply দেওয়া হবে\n"
     "━━━━━━━━━━━━━━━━━━━━\n\n"
     "🌟 শুভ রাত্রি! ভালো থাকুন 🙏\n\n"
@@ -144,10 +144,10 @@ last_replied: dict = {}
 
 def get_auto_reply():
     now = datetime.now()
-    # সকাল ৮:৩০ থেকে রাত ৯:৩০ → Busy
+    # সকাল ৯:০০ থেকে রাত ৯:০০ → Busy
     # বাকি সময় → Sleep
-    start = now.replace(hour=8, minute=30, second=0, microsecond=0)
-    end = now.replace(hour=21, minute=30, second=0, microsecond=0)
+    start = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    end = now.replace(hour=21, minute=0, second=0, microsecond=0)
     if start <= now < end:
         return BUSY_MESSAGE
     return SLEEP_MESSAGE
@@ -198,8 +198,8 @@ async def incoming_handler(event):
 
     reply_msg = get_auto_reply()
     now_dt = datetime.now()
-    start = now_dt.replace(hour=8, minute=30, second=0, microsecond=0)
-    end = now_dt.replace(hour=21, minute=30, second=0, microsecond=0)
+    start = now_dt.replace(hour=9, minute=0, second=0, microsecond=0)
+    end = now_dt.replace(hour=21, minute=0, second=0, microsecond=0)
     mode = "🌞 Day" if start <= now_dt < end else "🌙 Sleep"
     await event.reply(reply_msg)
     last_replied[sender_id] = now
@@ -429,13 +429,13 @@ async def timeout_loop(token):
 
 
 async def reminder_loop(token):
-    """প্রতি ঘণ্টায় (সকাল ৮:৩০ - রাত ৯:৩০) group এ reminder পাঠাও"""
+    """প্রতি ঘণ্টায় (সকাল ৯:০০ - রাত ৯:০০) group এ reminder পাঠাও"""
     while True:
         now = datetime.now()
         # পরবর্তী পুরো ঘণ্টা পর্যন্ত wait করো
-        next_hour = now.replace(minute=30, second=0, microsecond=0)
+        next_hour = now.replace(minute=0, second=0, microsecond=0)
         if next_hour <= now:
-            # পরের ঘণ্টার :৩০ তে
+            # পরের ঘণ্টার :০০ তে
             next_hour = next_hour.replace(hour=now.hour + 1) if now.hour < 23 else next_hour.replace(
                 hour=0) + timedelta(days=1)
         wait_sec = (next_hour - now).total_seconds()
@@ -456,7 +456,7 @@ async def reminder_loop(token):
                     "━━━━━━━━━━━━━━━━━━━━\n"
                     "😴 Admin এখন ঘুমাতে যাচ্ছেন\n"
                     "🔒 Group এখন বন্ধ হচ্ছে\n"
-                    "⏰ সকাল ৮:৩০ এ আবার চালু হবে\n"
+                    "⏰ সকাল ৯:০০ এ আবার চালু হবে\n"
                     "━━━━━━━━━━━━━━━━━━━━\n\n"
                     "❓ কারো কোনো সমস্যা থাকলে\n"
                     "💬 কাল সকালে জানাবেন\n"
@@ -476,7 +476,7 @@ async def reminder_loop(token):
 
 
 async def group_lock_unlock_loop(token):
-    """রাত ৯:৩০ এ group lock, সকাল ৮:৩০ এ unlock
+    """রাত ৯:০০ এ group lock, সকাল ৯:০০ এ unlock
     Owner আগে open করলেও bot বন্ধ করে দেবে"""
     group_was_locked = False  # track করো group locked আছে কিনা
 
@@ -488,26 +488,38 @@ async def group_lock_unlock_loop(token):
 
         is_night = not (open_time <= now < close_time)  # রাতের সময়
 
-        if is_night and not group_was_locked:
-            # রাতের সময় → lock করো
+        if is_night:
+            # রাতের সময় → চেক করো গ্রুপ আগে থেকে আনলক আছে কিনা
+            # যদি প্রথমবার হয় (not group_was_locked) অথবা ওনার গ্রুপ খুলে থাকে, তবে লক করো
             for gid in list(group_chat_ids):
-                result = tg_api(token, "setChatPermissions", {
-                    "chat_id": gid,
-                    "permissions": {
-                        "can_send_messages": False,
-                        "can_send_audios": False,
-                        "can_send_documents": False,
-                        "can_send_photos": False,
-                        "can_send_videos": False,
-                        "can_send_video_notes": False,
-                        "can_send_voice_notes": False,
-                        "can_send_polls": False,
-                        "can_send_other_messages": False,
-                        "can_add_web_page_previews": False
-                    }
-                })
-                if result.get("ok"):
-                    print(f"🔒 Group locked: {gid}")
+                should_lock = False
+                if not group_was_locked:
+                    should_lock = True
+                else:
+                    chat_info = tg_api(token, "getChat", {"chat_id": gid})
+                    if chat_info.get("ok"):
+                        perms = chat_info.get("result", {}).get("permissions", {})
+                        if perms.get("can_send_messages", True):
+                            should_lock = True
+
+                if should_lock:
+                    result = tg_api(token, "setChatPermissions", {
+                        "chat_id": gid,
+                        "permissions": {
+                            "can_send_messages": False,
+                            "can_send_audios": False,
+                            "can_send_documents": False,
+                            "can_send_photos": False,
+                            "can_send_videos": False,
+                            "can_send_video_notes": False,
+                            "can_send_voice_notes": False,
+                            "can_send_polls": False,
+                            "can_send_other_messages": False,
+                            "can_add_web_page_previews": False
+                        }
+                    })
+                    if result.get("ok"):
+                        print(f"🔒 Group auto-locked: {gid}")
             group_was_locked = True
 
         elif not is_night and group_was_locked:
@@ -559,7 +571,8 @@ async def welcome_bot_loop():
     print("🗑️ Voice delete চালু!")
     print("🆘 Problem tracking চালু!")
     print("⏰ 10min timeout চালু!")
-    print("🔔 5hr reminder চালু!")
+    print("🔔 Hourly reminder চালু!")
+    print("🔒 Group lock/unlock চালু!")
 
     tg_api(WELCOME_BOT_TOKEN, "getUpdates", {"offset": -1, "limit": 1, "timeout": 0})
     await asyncio.sleep(2)
@@ -600,7 +613,8 @@ async def welcome_bot_loop():
                                         "🗑️ Voice delete\n"
                                         "🆘 Problem tracking\n"
                                         "⏰ 10min auto-reply\n"
-                                        "🔔 5hr reminder\n\n"
+                                        "🔔 Hourly reminder\n"
+                                        "🔒 Group lock 9:00PM-9:00AM\n\n"
                                         "🛠️ Fix format:\n"
                                         "/fix [user_id] [সমাধান]\n\n"
                                         f"{BOT_SIGNATURE}"
@@ -640,8 +654,8 @@ async def main():
     me = await client.get_me()
     print(f"✅ Login: {me.first_name} (@{me.username})")
     print("📨 Auto-reply চালু!")
-    print("🌞 সকাল ৮:৩০ - রাত ৯:৩০ → Busy message")
-    print("🌙 রাত ৯:৩০ এর পরে → Sleep message")
+    print("🌞 সকাল ৯:০০ - রাত ৯:০০ → Busy message")
+    print("🌙 রাত ৯:০০ এর পরে → Sleep message")
     print("💡 ৫ মিনিট idle → bot আবার চালু")
     await asyncio.gather(
         client.run_until_disconnected(),
