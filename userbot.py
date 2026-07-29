@@ -605,12 +605,12 @@ async def group_lock_unlock_loop(token):
                             if result.get("ok"):
                                 tg_api(token, "sendMessage", {"chat_id": gid, "text": open_msg})
                                 print(f"🔓 Group unlocked (morning): {gid}")
+                                unlocked_today.add(gid)
                             else:
                                 print(f"⚠️ Failed to unlock group {gid}: {result}")
                         else:
                             print(f"ℹ️ Group {gid} is already unlocked.")
-
-                        unlocked_today.add(gid)
+                            unlocked_today.add(gid)
                     else:
                         print(f"⚠️ Failed to getChat for {gid} during day: {chat_info}")
 
