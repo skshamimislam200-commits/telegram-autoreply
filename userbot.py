@@ -468,6 +468,215 @@ def handle_owner_reply_to_notification(token, msg, owner_id):
     return False
 
 
+def handle_owner_admin_commands(token, msg, owner_id):
+    text = msg.get("text", "") or ""
+    text_clean = text.strip().lower()
+
+    # ১. /unpin command: গ্রুপগুলোর পিন করা মেসেজ আনপিন করো
+    if text_clean == "/unpin":
+        if not group_chat_ids:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "⚠️ কোনো সচল গ্রুপ পাওয়া যায়নি!"})
+            return True
+
+        success_count = 0
+        for gid in list(group_chat_ids):
+            res = tg_api(token, "unpinChatMessage", {"chat_id": gid})
+            if res.get("ok"):
+                success_count += 1
+
+        tg_api(token, "sendMessage", {
+            "chat_id": owner_id,
+            "text": f"🔓 {success_count}টি গ্রুপে পিন করা মেসেজ আনপিন করা হয়েছে!"
+        })
+        return True
+
+    # ২. /kick [user_id] command: সরাসরি ইউজার আইডি দিয়ে কিক করো
+    if text_clean.startswith("/kick"):
+        parts = text.split(" ")
+        if len(parts) < 2:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "Format: /kick [user_id]"})
+            return True
+        try:
+            target_uid = int(parts[1].strip())
+        except ValueError:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "⚠️ অবৈধ ইউজার আইডি!"})
+            return True
+
+        if not group_chat_ids:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "⚠️ কোনো সচল গ্রুপ পাওয়া যায়নি!"})
+            return True
+
+        success_count = 0
+        for gid in list(group_chat_ids):
+            res = tg_api(token, "banChatMember", {"chat_id": gid, "user_id": target_uid})
+            if res.get("ok"):
+                tg_api(token, "unbanChatMember", {"chat_id": gid, "user_id": target_uid, "only_if_banned": True})
+                success_count += 1
+
+        tg_api(token, "sendMessage", {
+            "chat_id": owner_id,
+            "text": f"👢 {success_count}টি গ্রুপ থেকে ইউজার {target_uid} কে কিক করা হয়েছে!"
+        })
+        return True
+
+    # ৩. /ban [user_id] command: গ্রুপ থেকে চিরতরে ব্যান করো
+    if text_clean.startswith("/ban"):
+        parts = text.split(" ")
+        if len(parts) < 2:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "Format: /ban [user_id]"})
+            return True
+        try:
+            target_uid = int(parts[1].strip())
+        except ValueError:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "⚠️ অবৈধ ইউজার আইডি!"})
+            return True
+
+        if not group_chat_ids:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "⚠️ কোনো সচল গ্রুপ পাওয়া যায়নি!"})
+            return True
+
+        success_count = 0
+        for gid in list(group_chat_ids):
+            res = tg_api(token, "banChatMember", {"chat_id": gid, "user_id": target_uid})
+            if res.get("ok"):
+                success_count += 1
+
+        tg_api(token, "sendMessage", {
+            "chat_id": owner_id,
+            "text": f"🚫 {success_count}টি গ্রুপ থেকে ইউজার {target_uid} কে ব্যান করা হয়েছে!"
+        })
+        return True
+
+    # ৪. রিপ্লাই বেসড অ্যাডমিন কমান্ডস (মেসেজ ডিলিট বা ইউজার কিক)
+    reply_to = msg.get("reply_to_message")
+    if reply_to and text_clean in ["/del", "/kick", "/ban"]:
+        forward_chat = reply_to.get("forward_from_chat")
+        forward_msg_id = reply_to.get("forward_from_message_id")
+
+        if not forward_chat or not forward_msg_id:
+            tg_api(token, "sendMessage", {
+                "chat_id": owner_id,
+                "text": "⚠️ এই মেসেজটি কোনো গ্রুপ থেকে ফরোয়ার্ড করা হয়নি অথবা মেসেজটির আইডি পাওয়া যায়নি!"
+            })
+            return True
+
+        target_gid = forward_chat.get("id")
+
+        if text_clean == "/del":
+            res = tg_api(token, "deleteMessage", {"chat_id": target_gid, "message_id": forward_msg_id})
+            if res.get("ok"):
+                tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "🗑️ গ্রুপ থেকে মেসেজটি ডিলিট করা হয়েছে!"})
+            else:
+                tg_api(token, "sendMessage", {"chat_id": owner_id, "text": f"⚠️ মেসেজটি ডিলিট করা যায়নি: {res}"})
+            return True
+
+        elif text_clean in ["/kick", "/ban"]:
+            forward_user = reply_to.get("forward_from")
+            if not forward_user:
+                tg_api(token, "sendMessage", {
+                    "chat_id": owner_id,
+                    "text": "⚠️ ইউজারের ফরোয়ার্ড প্রাইভেসি অন থাকায় আইডি পাওয়া যায়নি! কিক/ব্যান করতে সরাসরি `/kick [user_id]` ব্যবহার করুন।"
+                })
+                return True
+
+            target_uid = forward_user.get("id")
+            if text_clean == "/kick":
+                res = tg_api(token, "banChatMember", {"chat_id": target_gid, "user_id": target_uid})
+                if res.get("ok"):
+                    tg_api(token, "unbanChatMember", {"chat_id": target_gid, "user_id": target_uid, "only_if_banned": True})
+                    tg_api(token, "sendMessage", {"chat_id": owner_id, "text": f"👢 ইউজার {target_uid} কে গ্রুপ থেকে কিক করা হয়েছে!"})
+                else:
+                    tg_api(token, "sendMessage", {"chat_id": owner_id, "text": f"⚠️ কিক করা যায়নি: {res}"})
+            elif text_clean == "/ban":
+                res = tg_api(token, "banChatMember", {"chat_id": target_gid, "user_id": target_uid})
+                if res.get("ok"):
+                    tg_api(token, "sendMessage", {"chat_id": owner_id, "text": f"🚫 ইউজার {target_uid} কে গ্রুপ থেকে ব্যান করা হয়েছে!"})
+                else:
+                    tg_api(token, "sendMessage", {"chat_id": owner_id, "text": f"⚠️ ব্যান করা যায়নি: {res}"})
+            return True
+
+    return False
+
+
+pending_drafts: dict = {}
+
+def handle_owner_draft_broadcast(token, msg, owner_id):
+    text = msg.get("text", "") or ""
+    text_clean = text.strip().lower()
+
+    # ১. চেক করো ওনার কোনো সিদ্ধান্ত পাঠাচ্ছেন কিনা (send, pin, cancel)
+    if owner_id in pending_drafts and text_clean in ["send", "pin", "cancel"]:
+        draft_text = pending_drafts.pop(owner_id) # গেট এবং রিমুভ ড্রাফট
+
+        if text_clean == "cancel":
+            tg_api(token, "sendMessage", {
+                "chat_id": owner_id,
+                "text": "❌ ব্রডকাস্ট বাতিল করা হয়েছে।"
+            })
+            return True
+
+        if not group_chat_ids:
+            tg_api(token, "sendMessage", {
+                "chat_id": owner_id,
+                "text": "⚠️ কোনো সচল গ্রুপ পাওয়া যায়নি! ব্রডকাস্ট বাতিল করা হলো।"
+            })
+            return True
+
+        success_count = 0
+        pin_count = 0
+
+        for gid in list(group_chat_ids):
+            res = tg_api(token, "sendMessage", {
+                "chat_id": gid,
+                "text": draft_text,
+                "parse_mode": "Markdown"
+            })
+            if res.get("ok"):
+                success_count += 1
+                msg_id = res.get("result", {}).get("message_id")
+                if text_clean == "pin" and msg_id:
+                    pin_res = tg_api(token, "pinChatMessage", {
+                        "chat_id": gid,
+                        "message_id": msg_id,
+                        "disable_notification": False
+                    })
+                    if pin_res.get("ok"):
+                        pin_count += 1
+
+        status_msg = f"📢 ব্রডকাস্ট সফল হয়েছে!\n━━━━━━━━━━━━━━━━\n✅ পাঠানো হয়েছে: {success_count}টি গ্রুপে"
+        if text_clean == "pin":
+            status_msg += f"\n📌 পিন করা হয়েছে: {pin_count}টি গ্রুপে"
+
+        tg_api(token, "sendMessage", {
+            "chat_id": owner_id,
+            "text": status_msg
+        })
+        return True
+
+    # ২. যদি ওনার কোনো সাধারণ মেসেজ পাঠান (যা রুটিন কমান্ড বা রিপ্লাই নয়), তবে ড্রাফট হিসেবে সেভ করো
+    # আমরা নিশ্চিত করি মেসেজটি কোনো কমান্ড নয় (যেমন /start, /fix ইত্যাদি নয়)
+    if text.startswith("/"):
+        return False
+
+    pending_drafts[owner_id] = text
+    prompt_msg = (
+        f"📥 ব্রডকাস্ট ড্রাফট সেভ হয়েছে!\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"💬 মেসেজ: \"{text}\"\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"মেসেজটি গ্রুপে পাঠাতে চাইলে টাইপ করুন:\n"
+        f"👉 `send` - গ্রুপে সাধারণ মেসেজ হিসেবে পাঠাতে\n"
+        f"👉 `pin` - গ্রুপে পাঠিয়ে পিন করতে\n"
+        f"👉 `cancel` - বাতিল করতে"
+    )
+    tg_api(token, "sendMessage", {
+        "chat_id": owner_id,
+        "text": prompt_msg,
+        "parse_mode": "Markdown"
+    })
+    return True
+
+
 def handle_owner_fix(token, msg, owner_id):
     text = msg.get("text", "")
     if not text.startswith("/fix"):
@@ -723,28 +932,30 @@ async def welcome_bot_loop():
                     ctype = msg.get("chat", {}).get("type", "")
                     sid = msg.get("from", {}).get("id")
                     if ctype == "private" and sid == OWNER_ID:
-                        if not handle_owner_reply_to_notification(WELCOME_BOT_TOKEN, msg, OWNER_ID):
-                            if not handle_owner_fix(WELCOME_BOT_TOKEN, msg, OWNER_ID):
-                                if msg.get("text") == "/start":
-                                    tg_api(WELCOME_BOT_TOKEN, "sendMessage", {
-                                        "chat_id": msg["chat"]["id"],
-                                        "text": (
-                                            "╔══════════════════╗\n"
-                                            "║  🤖 Bot চালু!        ║\n"
-                                            "╚══════════════════╝\n\n"
-                                            "✅ সব feature চালু:\n"
-                                            "🎉 Welcome message\n"
-                                            "🚫 Bad word filter\n"
-                                            "🗑️ Voice delete\n"
-                                            "🆘 Problem tracking\n"
-                                            "⏰ 10min auto-reply\n"
-                                            "🔔 Hourly reminder\n"
-                                            "🔒 Group lock 9:00PM-9:00AM\n\n"
-                                            "🛠️ Fix format:\n"
-                                            "/fix [user_id] [সমাধান]\n\n"
-                                            f"{BOT_SIGNATURE}"
-                                        )
-                                    })
+                        if not handle_owner_admin_commands(WELCOME_BOT_TOKEN, msg, OWNER_ID):
+                            if not handle_owner_reply_to_notification(WELCOME_BOT_TOKEN, msg, OWNER_ID):
+                                if not handle_owner_draft_broadcast(WELCOME_BOT_TOKEN, msg, OWNER_ID):
+                                    if not handle_owner_fix(WELCOME_BOT_TOKEN, msg, OWNER_ID):
+                                        if msg.get("text") == "/start":
+                                            tg_api(WELCOME_BOT_TOKEN, "sendMessage", {
+                                                "chat_id": msg["chat"]["id"],
+                                                "text": (
+                                                    "╔══════════════════╗\n"
+                                                    "║  🤖 Bot চালু!        ║\n"
+                                                    "╚══════════════════╝\n\n"
+                                                    "✅ সব feature চালু:\n"
+                                                    "🎉 Welcome message\n"
+                                                    "🚫 Bad word filter\n"
+                                                    "🗑️ Voice delete\n"
+                                                    "🆘 Problem tracking\n"
+                                                    "⏰ 10min auto-reply\n"
+                                                    "🔔 Hourly reminder\n"
+                                                    "🔒 Group lock 9:00PM-9:00AM\n\n"
+                                                    "🛠️ Fix format:\n"
+                                                    "/fix [user_id] [সমাধান]\n\n"
+                                                    f"{BOT_SIGNATURE}"
+                                                )
+                                            })
                     elif ctype in ["group", "supergroup"]:
                         handle_group_message(WELCOME_BOT_TOKEN, msg, OWNER_ID)
                 cm = update.get("chat_member")
