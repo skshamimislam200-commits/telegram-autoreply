@@ -292,12 +292,17 @@ def handle_group_message(token, msg, owner_id):
     # Admin commands inside the group (Owner/Admin replies in group to moderate)
     if text:
         text_clean = text.strip().lower()
-        if text_clean in ["/del", "/kick", "/ban"]:
+        # Handle command autocomplete with bot username (e.g. /kick@botname -> /kick)
+        base_cmd = text_clean.split("@")[0]
+        if base_cmd in ["/del", "/kick", "/ban"]:
             reply_to_msg = msg.get("reply_to_message")
+            print(f"🔍 Admin command detected: {base_cmd} (full: {text_clean}) from {sender_name} ({sender_id}) in chat {chat_id}. Reply msg exists: {bool(reply_to_msg)}")
             if reply_to_msg:
                 is_authorized = (sender_id == owner_id)
+                status = "owner" if is_authorized else "unknown"
                 if not is_authorized:
                     member_res = tg_api(token, "getChatMember", {"chat_id": chat_id, "user_id": sender_id})
+                    print(f"🔍 getChatMember response for {sender_name}: {member_res}")
                     if member_res.get("ok"):
                         status = member_res.get("result", {}).get("status", "")
                         if status in ["creator", "administrator"]:
@@ -307,13 +312,12 @@ def handle_group_message(token, msg, owner_id):
                     target_msg_id = reply_to_msg.get("message_id")
                     target_user = reply_to_msg.get("from", {})
                     target_uid = target_user.get("id")
+                    print(f"✅ User {sender_name} is authorized ({status}). Target msg: {target_msg_id}, Target user: {target_uid}")
 
-                    if text_clean == "/del" and target_msg_id:
-                        # Delete target message
-                        tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": target_msg_id})
-                        # Delete command message
+                    if base_cmd == "/del" and target_msg_id:
+                        del_res = tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": target_msg_id})
                         tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
-                        print(f"🗑️ Authorized user {sender_id} deleted message {target_msg_id} in group {chat_id}")
+                        print(f"🗑️ Delete result: {del_res}")
                         return
 
                     # Owner protection for kick and ban
@@ -322,19 +326,22 @@ def handle_group_message(token, msg, owner_id):
                         tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
                         return
 
-                    if text_clean == "/kick" and target_uid:
+                    if base_cmd == "/kick" and target_uid:
                         res = tg_api(token, "banChatMember", {"chat_id": chat_id, "user_id": target_uid})
+                        print(f"👢 banChatMember (kick) result: {res}")
                         if res.get("ok"):
-                            tg_api(token, "unbanChatMember", {"chat_id": chat_id, "user_id": target_uid, "only_if_banned": True})
+                            unban_res = tg_api(token, "unbanChatMember", {"chat_id": chat_id, "user_id": target_uid, "only_if_banned": True})
+                            print(f"👢 unbanChatMember (release) result: {unban_res}")
                         tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
-                        print(f"👢 Authorized user {sender_id} kicked user {target_uid} in group {chat_id}")
                         return
 
-                    elif text_clean == "/ban" and target_uid:
-                        tg_api(token, "banChatMember", {"chat_id": chat_id, "user_id": target_uid})
+                    elif base_cmd == "/ban" and target_uid:
+                        res = tg_api(token, "banChatMember", {"chat_id": chat_id, "user_id": target_uid})
+                        print(f"🚫 banChatMember result: {res}")
                         tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
-                        print(f"🚫 Authorized user {sender_id} banned user {target_uid} in group {chat_id}")
                         return
+                else:
+                    print(f"❌ User {sender_name} ({sender_id}) is not authorized. Status: {status}")
 
     # Voice delete
     if msg.get("voice") or msg.get("video_note"):
