@@ -390,16 +390,73 @@ def handle_group_message(token, msg, owner_id):
             print(f"🆘 Problem: {sender_name} → {problem_text[:30]}")
         return
 
-    # Owner mention
+    # Owner mention (privately)
     if text and text.strip().endswith("?"):
+        group_title = chat.get("title", "গ্রুপ")
         tg_api(token, "sendMessage", {
-            "chat_id": chat_id,
+            "chat_id": owner_id,
             "text": (
-                f"📢 [Admin](tg://user?id={owner_id}) একটু দেখুন!\n"
-                f"💬 {sender_mention} প্রশ্ন করেছেন।"
-            ),
-            "parse_mode": "Markdown"
+                f"📢 নতুন প্রশ্ন এসেছে!\n"
+                f"━━━━━━━━━━━━━━━━\n"
+                f"👥 Group: {group_title} (ID: {chat_id})\n"
+                f"👤 Member: {sender_mention}\n"
+                f"💬 প্রশ্ন: {text}\n"
+                f"━━━━━━━━━━━━━━━━"
+            )
         })
+
+
+def handle_owner_reply_to_notification(token, msg, owner_id):
+    reply_to = msg.get("reply_to_message")
+    if not reply_to:
+        return False
+
+    replied_text = reply_to.get("text", "") or ""
+    import re
+
+    # Parse Group ID and Member ID
+    gid_match = re.search(r"Group ID:\s*(-?\d+)", replied_text) or re.search(r"Group:.*\(ID:\s*(-?\d+)\)", replied_text)
+    uid_match = re.search(r"Fix:\s*/fix\s+(\d+)", replied_text) or re.search(r"Member:.*\(ID:\s*(\d+)\)", replied_text)
+
+    if not gid_match:
+        return False
+
+    gid = int(gid_match.group(1))
+    uid = int(uid_match.group(1)) if uid_match else None
+    reply_content = msg.get("text", "")
+
+    if uid:
+        send_text = (
+            f"╔══════════════════════╗\n"
+            f"║   📩  ADMIN REPLY        ║\n"
+            f"╚══════════════════════╝\n\n"
+            f"✅ [Member](tg://user?id={uid}) আপনার উত্তর:\n\n"
+            f"💬 {reply_content}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"{BOT_SIGNATURE}"
+        )
+    else:
+        send_text = (
+            f"╔══════════════════════╗\n"
+            f"║   📩  ADMIN REPLY        ║\n"
+            f"╚══════════════════════╝\n\n"
+            f"💬 {reply_content}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"{BOT_SIGNATURE}"
+        )
+
+    result = tg_api(token, "sendMessage", {
+        "chat_id": gid,
+        "text": send_text,
+        "parse_mode": "Markdown"
+    })
+
+    if result.get("ok"):
+        if uid:
+            pending_problems.pop(uid, None)
+        tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "✅ আপনার উত্তরটি গ্রুপে পাঠানো হয়েছে!"})
+        return True
+    return False
 
 
 def handle_owner_fix(token, msg, owner_id):
@@ -657,27 +714,28 @@ async def welcome_bot_loop():
                     ctype = msg.get("chat", {}).get("type", "")
                     sid = msg.get("from", {}).get("id")
                     if ctype == "private" and sid == OWNER_ID:
-                        if not handle_owner_fix(WELCOME_BOT_TOKEN, msg, OWNER_ID):
-                            if msg.get("text") == "/start":
-                                tg_api(WELCOME_BOT_TOKEN, "sendMessage", {
-                                    "chat_id": msg["chat"]["id"],
-                                    "text": (
-                                        "╔══════════════════╗\n"
-                                        "║  🤖 Bot চালু!        ║\n"
-                                        "╚══════════════════╝\n\n"
-                                        "✅ সব feature চালু:\n"
-                                        "🎉 Welcome message\n"
-                                        "🚫 Bad word filter\n"
-                                        "🗑️ Voice delete\n"
-                                        "🆘 Problem tracking\n"
-                                        "⏰ 10min auto-reply\n"
-                                        "🔔 Hourly reminder\n"
-                                        "🔒 Group lock 9:00PM-9:00AM\n\n"
-                                        "🛠️ Fix format:\n"
-                                        "/fix [user_id] [সমাধান]\n\n"
-                                        f"{BOT_SIGNATURE}"
-                                    )
-                                })
+                        if not handle_owner_reply_to_notification(WELCOME_BOT_TOKEN, msg, OWNER_ID):
+                            if not handle_owner_fix(WELCOME_BOT_TOKEN, msg, OWNER_ID):
+                                if msg.get("text") == "/start":
+                                    tg_api(WELCOME_BOT_TOKEN, "sendMessage", {
+                                        "chat_id": msg["chat"]["id"],
+                                        "text": (
+                                            "╔══════════════════╗\n"
+                                            "║  🤖 Bot চালু!        ║\n"
+                                            "╚══════════════════╝\n\n"
+                                            "✅ সব feature চালু:\n"
+                                            "🎉 Welcome message\n"
+                                            "🚫 Bad word filter\n"
+                                            "🗑️ Voice delete\n"
+                                            "🆘 Problem tracking\n"
+                                            "⏰ 10min auto-reply\n"
+                                            "🔔 Hourly reminder\n"
+                                            "🔒 Group lock 9:00PM-9:00AM\n\n"
+                                            "🛠️ Fix format:\n"
+                                            "/fix [user_id] [সমাধান]\n\n"
+                                            f"{BOT_SIGNATURE}"
+                                        )
+                                    })
                     elif ctype in ["group", "supergroup"]:
                         handle_group_message(WELCOME_BOT_TOKEN, msg, OWNER_ID)
                 cm = update.get("chat_member")
