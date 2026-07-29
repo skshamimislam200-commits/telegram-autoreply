@@ -578,6 +578,34 @@ def handle_owner_admin_commands(token, msg, owner_id):
         })
         return True
 
+    # /unban [user_id] command: গ্রুপ থেকে আনব্যান করো
+    if text_clean.startswith("/unban"):
+        parts = text.split(" ")
+        if len(parts) < 2:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "Format: /unban [user_id]"})
+            return True
+        try:
+            target_uid = int(parts[1].strip())
+        except ValueError:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "⚠️ অবৈধ ইউজার আইডি!"})
+            return True
+
+        if not group_chat_ids:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "⚠️ কোনো সচল গ্রুপ পাওয়া যায়নি!"})
+            return True
+
+        success_count = 0
+        for gid in list(group_chat_ids):
+            res = tg_api(token, "unbanChatMember", {"chat_id": gid, "user_id": target_uid})
+            if res.get("ok"):
+                success_count += 1
+
+        tg_api(token, "sendMessage", {
+            "chat_id": owner_id,
+            "text": f"🔓 {success_count}টি গ্রুপ থেকে ইউজার {target_uid} কে আনব্যান করা হয়েছে! এখন সে গ্রুপে পুনরায় জয়েন করতে পারবে।"
+        })
+        return True
+
     # ৪. রিপ্লাই বেসড অ্যাডমিন কমান্ডস (মেসেজ ডিলিট বা ইউজার কিক)
     reply_to = msg.get("reply_to_message")
     if reply_to and text_clean in ["/del", "/kick", "/ban"]:
