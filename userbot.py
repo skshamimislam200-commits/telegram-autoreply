@@ -904,11 +904,12 @@ async def reminder_loop(token):
                     tg_api(token, "sendMessage", {"chat_id": gid, "text": sleep_reminder})
                 print("🌙 Sleep reminder sent")
 
-            # সকাল ৮:৩০ - রাত ৯:৩০ এর মধ্যে → normal reminder
+            # সকাল ৮:৩০ - রাত ৯:৩০ এর মধ্যে → normal reminder (দিনে ২ বার: দুপুর ১২:০০ ও সন্ধ্যা ৬:০০)
             elif open_time <= now < close_time:
-                for gid in list(group_chat_ids):
-                    tg_api(token, "sendMessage", {"chat_id": gid, "text": REMINDER_MESSAGE})
-                print(f"🔔 Hourly reminder sent: {now.strftime('%H:%M')}")
+                if now.hour in [12, 18]:
+                    for gid in list(group_chat_ids):
+                        tg_api(token, "sendMessage", {"chat_id": gid, "text": REMINDER_MESSAGE})
+                    print(f"🔔 Day reminder sent: {now.strftime('%H:%M')}")
 
 
 async def group_lock_unlock_loop(token):
