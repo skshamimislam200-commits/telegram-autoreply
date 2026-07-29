@@ -267,6 +267,15 @@ async def welcome_bot_loop():
     offset = 0
     base = f"https://api.telegram.org/bot{WELCOME_BOT_TOKEN}"
 
+    # পুরনো conflict clear করো
+    try:
+        urllib.request.urlopen(
+            f"{base}/getUpdates?offset=-1&limit=1", timeout=10
+        )
+    except Exception:
+        pass
+    await asyncio.sleep(2)
+
     while True:
         try:
             url = (
