@@ -231,6 +231,18 @@ async def incoming_handler(event):
         print(f"⏸ Cooldown active: {sender.first_name} [ID: {sender_id}]")
         return
 
+    # Check if chat is in Archived folder (folder_id == 1)
+    try:
+        input_chat = await event.get_input_chat()
+        dialogs = await event.client.get_dialogs(limit=1, entity=input_chat)
+        if dialogs:
+            dialog = dialogs[0]
+            if dialog.folder_id == 1:
+                print(f"📁 Archived chat ignored: {sender.first_name} [ID: {sender_id}]")
+                return
+    except Exception as e:
+        print(f"⚠️ Error checking archive folder for {sender_id}: {e}")
+
     reply_msg = get_auto_reply()
     now_dt = datetime.now(BD_TZ)
     start = now_dt.replace(hour=9, minute=0, second=0, microsecond=0)
