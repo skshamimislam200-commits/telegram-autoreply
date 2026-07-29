@@ -14,7 +14,7 @@ load_dotenv()
 API_ID = int(os.getenv("API_ID", "35398542"))
 API_HASH = os.getenv("API_HASH", "e7991fac34e488dbc41f95125a778cfa")
 SESSION_STRING = os.getenv("SESSION_STRING", "")
-WELCOME_BOT_TOKEN = os.getenv("WELCOME_BOT_TOKEN", "")
+WELCOME_BOT_TOKEN = os.getenv("WELCOME_BOT_TOKEN", "").strip()
 
 BUSY_MESSAGE = (
     "╔══════════════════════╗\n"
@@ -173,14 +173,16 @@ async def welcome_bot_loop():
                     if was_out and is_in:
                         member = cm["new_chat_member"]["user"]
                         chat_id = cm["chat"]["id"]
-                        name = (f"@{member['username']}"
-                                if member.get("username")
-                                else member.get("first_name", "বন্ধু"))
+                        first = member.get("first_name", "")
+                        last = member.get("last_name", "")
+                        full_name = (first + " " + last).strip() or "বন্ধু"
+                        username = member.get("username", "")
+                        name = f"@{username}" if username else full_name
                         tg_api(WELCOME_BOT_TOKEN, "sendMessage", {
                             "chat_id": chat_id,
                             "text": WELCOME_MESSAGE.format(name=name)
                         })
-                        print(f"🎉 Welcome: {member.get('first_name')} → {cm['chat']['title']}")
+                        print(f"🎉 Welcome: {full_name} → {cm['chat']['title']}")
 
         except Exception as e:
             print(f"⚠️ Welcome loop error: {e}")
