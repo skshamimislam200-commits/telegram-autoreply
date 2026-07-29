@@ -316,14 +316,24 @@ def handle_group_message(token, msg, owner_id):
 
                     if base_cmd == "/del" and target_msg_id:
                         del_res = tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": target_msg_id})
-                        tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
                         print(f"🗑️ Delete result: {del_res}")
+                        if del_res.get("ok"):
+                            tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+                        else:
+                            error_desc = del_res.get("description", "Unknown error")
+                            tg_api(token, "sendMessage", {
+                                "chat_id": chat_id,
+                                "text": f"⚠️ মেসেজ ডিলিট করা যায়নি! (ভুল: {error_desc})"
+                            })
                         return
 
                     # Owner protection for kick and ban
                     if target_uid == owner_id:
                         print(f"🛡️ Protected owner {owner_id} from kick/ban in group {chat_id}")
-                        tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+                        tg_api(token, "sendMessage", {
+                            "chat_id": chat_id,
+                            "text": "🛡️ ওনার (মালিক) কে কিক বা ব্যান করা সম্ভব নয়!"
+                        })
                         return
 
                     if base_cmd == "/kick" and target_uid:
@@ -332,13 +342,26 @@ def handle_group_message(token, msg, owner_id):
                         if res.get("ok"):
                             unban_res = tg_api(token, "unbanChatMember", {"chat_id": chat_id, "user_id": target_uid, "only_if_banned": True})
                             print(f"👢 unbanChatMember (release) result: {unban_res}")
-                        tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+                            tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+                        else:
+                            error_desc = res.get("description", "Unknown error")
+                            tg_api(token, "sendMessage", {
+                                "chat_id": chat_id,
+                                "text": f"⚠️ কিক করা যায়নি! (ভুল: {error_desc})"
+                            })
                         return
 
                     elif base_cmd == "/ban" and target_uid:
                         res = tg_api(token, "banChatMember", {"chat_id": chat_id, "user_id": target_uid})
                         print(f"🚫 banChatMember result: {res}")
-                        tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+                        if res.get("ok"):
+                            tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+                        else:
+                            error_desc = res.get("description", "Unknown error")
+                            tg_api(token, "sendMessage", {
+                                "chat_id": chat_id,
+                                "text": f"⚠️ ব্যান করা যায়নি! (ভুল: {error_desc})"
+                            })
                         return
                 else:
                     print(f"❌ User {sender_name} ({sender_id}) is not authorized. Status: {status}")
