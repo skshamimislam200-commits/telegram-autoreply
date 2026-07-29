@@ -3,7 +3,7 @@ import os
 import json
 import urllib.request
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timedelta
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from dotenv import load_dotenv
@@ -437,7 +437,7 @@ async def reminder_loop(token):
         if next_hour <= now:
             # পরের ঘণ্টার :৩০ তে
             next_hour = next_hour.replace(hour=now.hour + 1) if now.hour < 23 else next_hour.replace(
-                hour=0) + __import__("datetime").timedelta(days=1)
+                hour=0) + timedelta(days=1)
         wait_sec = (next_hour - now).total_seconds()
         await asyncio.sleep(wait_sec)
 
