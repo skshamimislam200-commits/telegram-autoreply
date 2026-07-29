@@ -2,7 +2,6 @@ import asyncio
 import os
 import json
 import urllib.request
-import urllib.parse
 import urllib.error
 from datetime import datetime
 from telethon import TelegramClient, events
@@ -20,31 +19,31 @@ SESSION_STRING = os.getenv("SESSION_STRING", "")
 WELCOME_BOT_TOKEN = os.getenv("WELCOME_BOT_TOKEN", "").strip()
 OWNER_ID = int(os.getenv("OWNER_ID", "7918793670"))
 
+GROUP_REMINDER_INTERVAL = 5 * 60 * 60  # ৫ ঘণ্টা
+OWNER_REPLY_TIMEOUT = 10 * 60           # ১০ মিনিট
+
 # ============================================================
-# 🚫 BAD WORDS LIST (বাংলা + ইংরেজি)
+# 🚫 BAD WORDS LIST
 # ============================================================
 BAD_WORDS = [
-    # বাংলা গালি
     "মাদারচোদ", "মাদারচুদ", "বাল", "বালছাল", "চোদ", "চুদ", "চুদি",
     "শালা", "হারামি", "হারামজাদা", "কুত্তা", "কুত্তার বাচ্চা",
     "বেশ্যা", "রান্ডি", "খানকি", "মাগি", "ভোদা", "ভোদাই",
     "গাধা", "গু", "হিজড়া", "শুয়োর", "শুয়োরের বাচ্চা",
     "কামিনী", "ছিনাল", "বজ্জাত", "নোংরা", "বেহায়া", "ফাজিল",
-    # ইংরেজি গালি
     "fuck", "fucker", "fucking", "fuk", "f*ck", "f**k",
     "shit", "bitch", "bastard", "asshole", "ass", "arse",
     "dick", "cock", "pussy", "whore", "slut",
     "cunt", "nigga", "nigger", "motherfucker", "mf",
     "idiot", "stupid", "moron", "dumb", "loser",
     "wtf", "stfu", "gtfo", "kys",
-    # Romanized বাংলা (English হরফে বাংলা গালি)
     "bal", "chod", "chud", "harami", "haramjada",
     "khankir", "magi", "hijra", "shuorer", "gadha",
     "sala", "shala", "madar", "madarjat", "beshsha",
 ]
 
 # ============================================================
-# 💬 USERBOT MESSAGES
+# 💬 MESSAGES
 # ============================================================
 BUSY_MESSAGE = (
     "╔══════════════════════╗\n"
@@ -59,8 +58,7 @@ BUSY_MESSAGE = (
     "🕐 ৩০ - ৬০ মিনিটের মধ্যে\n"
     "   আপনাকে reply করা হবে\n"
     "━━━━━━━━━━━━━━━━━━━━\n\n"
-    "💙 ধৈর্য ধরার জন্য আন্তরিক\n"
-    "   ধন্যবাদ! 🙏\n\n"
+    "💙 ধৈর্য ধরার জন্য ধন্যবাদ! 🙏\n\n"
     "『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
 )
 
@@ -75,9 +73,9 @@ SLEEP_MESSAGE = (
     "🌛 রাতের বিশ্রাম চলছে...\n"
     "━━━━━━━━━━━━━━━━━━━━\n"
     "⏰ আগামীকাল সকাল ১০টায়\n"
-    "   আপনাকে reply দেওয়া হবে\n"
+    "   reply দেওয়া হবে\n"
     "━━━━━━━━━━━━━━━━━━━━\n\n"
-    "🌟 শুভ রাত্রি! ভালো থাকুন 🙏\n\n"
+    "🌟 শুভ রাত্রি! 🙏\n\n"
     "『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
 )
 
@@ -94,8 +92,21 @@ WELCOME_MESSAGE = (
     "│     সাথে যোগাযোগ করুন            │\n"
     "└──────────────────────────┘\n\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    "আশা করি এখানে আপনার ভালো লাগবে! 😊\n"
+    "আশা করি এখানে ভালো লাগবে! 😊\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    "『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
+)
+
+REMINDER_MESSAGE = (
+    "╔══════════════════════╗\n"
+    "║   🔔  ADMIN REMINDER     ║\n"
+    "╚══════════════════════╝\n\n"
+    "হ্যালো সবাই! 👋\n\n"
+    "━━━━━━━━━━━━━━━━━━━━\n"
+    "❓ কারো কোনো সমস্যা আছে?\n"
+    "💬 থাকলে এখানে জানান\n"
+    "🛠️ Admin সমাধান করে দেবেন!\n"
+    "━━━━━━━━━━━━━━━━━━━━\n\n"
     "『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
 )
 
@@ -112,6 +123,15 @@ else:
 owner_replied: set = set()
 idle_timers: dict = {}
 
+# problem_tracking: {user_id: {chat_id, name, waiting, msg_id, time}}
+problem_tracking: dict = {}
+
+# pending_problems: {user_id: {chat_id, name, problem, time}}
+# owner ১০ মিনিটে fix না করলে auto reply যাবে
+pending_problems: dict = {}
+
+group_chat_ids: set = set()
+
 
 def get_auto_reply():
     hour = datetime.now().hour
@@ -121,7 +141,6 @@ def get_auto_reply():
 
 
 def contains_bad_word(text: str) -> bool:
-    """Text এ bad word আছে কিনা চেক করো"""
     if not text:
         return False
     text_lower = text.lower()
@@ -173,13 +192,15 @@ async def outgoing_handler(event):
 
 
 # ============================================================
-# 🎉 WELCOME BOT — urllib দিয়ে
+# 🎉 WELCOME BOT
 # ============================================================
 def tg_api(token, method, data):
     url = f"https://api.telegram.org/bot{token}/{method}"
     payload = json.dumps(data).encode("utf-8")
-    req = urllib.request.Request(url, data=payload,
-                                  headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url, data=payload,
+        headers={"Content-Type": "application/json"}
+    )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
@@ -189,75 +210,239 @@ def tg_api(token, method, data):
 
 
 def handle_group_message(token, msg, owner_id):
-    """Group message handle — bad word delete + voice delete + unanswered alert"""
     chat = msg.get("chat", {})
     chat_id = chat.get("id")
     chat_type = chat.get("type", "")
-
-    # শুধু group এ কাজ করবে
     if chat_type not in ["group", "supergroup"]:
         return
 
+    group_chat_ids.add(chat_id)
+
     msg_id = msg.get("message_id")
     sender = msg.get("from", {})
+    sender_id = sender.get("id")
     sender_name = sender.get("first_name", "কেউ")
     sender_username = sender.get("username", "")
     sender_mention = f"@{sender_username}" if sender_username else sender_name
-
     text = msg.get("text", "") or msg.get("caption", "") or ""
 
-    # ── ১. Voice message delete ──
+    # ── Voice delete ──
     if msg.get("voice") or msg.get("video_note"):
-        tg_api(token, "deleteMessage", {
-            "chat_id": chat_id,
-            "message_id": msg_id
-        })
+        tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
         tg_api(token, "sendMessage", {
             "chat_id": chat_id,
             "text": (
                 f"🚫 {sender_mention} এর voice message delete করা হয়েছে!\n"
                 f"━━━━━━━━━━━━━━━━\n"
-                f"⚠️ এই group এ voice message পাঠানো নিষিদ্ধ।\n"
+                f"⚠️ এই group এ voice message নিষিদ্ধ।\n"
                 f"💬 Text এ লিখুন।"
             )
         })
-        print(f"🗑️ Voice deleted: {sender_name} → {chat.get('title')}")
+        print(f"🗑️ Voice deleted: {sender_name}")
         return
 
-    # ── ২. Bad word delete ──
+    # ── Bad word delete ──
     if contains_bad_word(text):
-        tg_api(token, "deleteMessage", {
-            "chat_id": chat_id,
-            "message_id": msg_id
-        })
+        tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
         tg_api(token, "sendMessage", {
             "chat_id": chat_id,
             "text": (
                 f"⛔ {sender_mention} এর message delete করা হয়েছে!\n"
                 f"━━━━━━━━━━━━━━━━\n"
-                f"🚫 অশ্লীল বা খারাপ শব্দ ব্যবহার নিষিদ্ধ।\n"
-                f"✅ সবার সাথে ভদ্রভাবে কথা বলুন।"
+                f"🚫 অশ্লীল শব্দ ব্যবহার নিষিদ্ধ।\n"
+                f"✅ ভদ্রভাবে কথা বলুন।"
             )
         })
-        print(f"🗑️ Bad word deleted: {sender_name} → {chat.get('title')}")
+        print(f"🗑️ Bad word deleted: {sender_name}")
         return
 
-    # ── ৩. Unanswered message → owner কে mention ──
-    # যদি কেউ question করে (? দিয়ে শেষ) বা help চায়
-    if text and (text.strip().endswith("?") or
-                 any(w in text.lower() for w in ["help", "হেল্প", "সাহায্য", "সমস্যা", "problem", "plm", "pls", "please"])):
-        # owner কে mention করো
-        owner_mention = f"[Admin](tg://user?id={owner_id})"
+    # ── Problem detection ──
+    problem_keywords = [
+        "সমস্যা", "problem", "plm", "help", "হেল্প",
+        "সাহায্য", "pls", "please", "issue", "fix",
+        "কাজ করছে না", "হচ্ছে না", "পারছি না", "বুঝছি না"
+    ]
+    has_problem = any(w in text.lower() for w in problem_keywords)
+
+    if has_problem and sender_id:
+        if sender_id not in problem_tracking:
+            problem_tracking[sender_id] = {
+                "chat_id": chat_id,
+                "name": sender_mention,
+                "waiting": True,
+                "msg_id": msg_id,
+                "time": datetime.now().timestamp()
+            }
+            tg_api(token, "sendMessage", {
+                "chat_id": chat_id,
+                "text": (
+                    f"🤝 {sender_mention} আপনার সমস্যার কথা শুনলাম!\n"
+                    f"━━━━━━━━━━━━━━━━\n"
+                    f"💬 একটু বিস্তারিত বলুন — কী সমস্যা হচ্ছে?\n"
+                    f"🛠️ Admin শীঘ্রই সমাধান দেবেন।"
+                ),
+                "reply_to_message_id": msg_id
+            })
+        return
+
+    # ── Problem details (waiting state) ──
+    if sender_id and sender_id in problem_tracking:
+        info = problem_tracking[sender_id]
+        if info.get("waiting"):
+            problem_tracking[sender_id]["waiting"] = False
+            problem_text = text
+
+            # Owner কে private message
+            tg_api(token, "sendMessage", {
+                "chat_id": owner_id,
+                "text": (
+                    f"🆘 নতুন সমস্যা রিপোর্ট!\n"
+                    f"━━━━━━━━━━━━━━━━\n"
+                    f"👤 Member: {info['name']}\n"
+                    f"💬 সমস্যা: {problem_text}\n"
+                    f"🏠 Group ID: {chat_id}\n"
+                    f"━━━━━━━━━━━━━━━━\n"
+                    f"⏰ ১০ মিনিটের মধ্যে reply না করলে\n"
+                    f"bot automatically group এ জানাবে।\n"
+                    f"━━━━━━━━━━━━━━━━\n"
+                    f"✏️ Fix করতে লিখুন:\n"
+                    f"/fix {sender_id} আপনার সমাধান"
+                )
+            })
+
+            # Group এ confirm
+            tg_api(token, "sendMessage", {
+                "chat_id": chat_id,
+                "text": (
+                    f"✅ {info['name']} আপনার সমস্যা Admin কে জানানো হয়েছে!\n"
+                    f"━━━━━━━━━━━━━━━━\n"
+                    f"⏳ শীঘ্রই সমাধান দেওয়া হবে।"
+                ),
+                "reply_to_message_id": msg_id
+            })
+
+            # pending_problems এ রাখো (১০ মিনিট timeout)
+            pending_problems[sender_id] = {
+                "chat_id": chat_id,
+                "name": info["name"],
+                "problem": problem_text,
+                "time": datetime.now().timestamp()
+            }
+
+            del problem_tracking[sender_id]
+            print(f"🆘 Problem reported: {sender_name} → {problem_text[:30]}")
+        return
+
+    # ── Owner mention (? দিয়ে শেষ) ──
+    if text and text.strip().endswith("?"):
         tg_api(token, "sendMessage", {
             "chat_id": chat_id,
             "text": (
-                f"📢 {owner_mention} একটু দেখুন!\n"
-                f"━━━━━━━━━━━━━━━━\n"
-                f"💬 {sender_mention} সাহায্য চাইছেন।"
+                f"📢 [Admin](tg://user?id={owner_id}) একটু দেখুন!\n"
+                f"💬 {sender_mention} প্রশ্ন করেছেন।"
             ),
             "parse_mode": "Markdown"
         })
-        print(f"📢 Owner mentioned for: {sender_name} → {text[:30]}")
+
+
+def handle_owner_fix(token, msg, owner_id):
+    """Owner এর /fix command"""
+    text = msg.get("text", "")
+    if not text.startswith("/fix"):
+        return False
+
+    parts = text.split(" ", 2)
+    if len(parts) < 3:
+        tg_api(token, "sendMessage", {
+            "chat_id": owner_id,
+            "text": (
+                "❌ Format ভুল!\n"
+                "✅ সঠিক format:\n"
+                "/fix [user_id] [সমাধান]\n\n"
+                "উদাহরণ:\n"
+                "/fix 123456789 সমস্যা fix হয়ে গেছে"
+            )
+        })
+        return True
+
+    try:
+        target_user_id = int(parts[1])
+        fix_message = parts[2]
+    except ValueError:
+        return False
+
+    # pending থেকে সরাও
+    pending_problems.pop(target_user_id, None)
+
+    # সব group এ fix message পাঠাও
+    for gid in group_chat_ids:
+        tg_api(token, "sendMessage", {
+            "chat_id": gid,
+            "text": (
+                f"╔══════════════════════╗\n"
+                f"║   🛠️  PROBLEM SOLVED!    ║\n"
+                f"╚══════════════════════╝\n\n"
+                f"✅ [Member](tg://user?id={target_user_id}) আপনার সমস্যার সমাধান:\n\n"
+                f"💡 {fix_message}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"আর সমস্যা হলে জানাবেন! 😊\n\n"
+                f"『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
+            ),
+            "parse_mode": "Markdown"
+        })
+
+    tg_api(token, "sendMessage", {
+        "chat_id": owner_id,
+        "text": "✅ Fix message পাঠানো হয়েছে!"
+    })
+    print(f"🛠️ Fix sent for user {target_user_id}")
+    return True
+
+
+async def pending_problem_timeout_loop(token):
+    """১০ মিনিটে owner reply না করলে auto message"""
+    while True:
+        await asyncio.sleep(30)  # প্রতি ৩০ সেকেন্ডে check
+        now = datetime.now().timestamp()
+        expired = [
+            uid for uid, info in pending_problems.items()
+            if now - info["time"] >= OWNER_REPLY_TIMEOUT
+        ]
+        for uid in expired:
+            info = pending_problems.pop(uid)
+            chat_id = info["chat_id"]
+            name = info["name"]
+            tg_api(token, "sendMessage", {
+                "chat_id": chat_id,
+                "text": (
+                    f"╔══════════════════════╗\n"
+                    f"║   ⏰  AUTO REPLY          ║\n"
+                    f"╚══════════════════════╝\n\n"
+                    f"হ্যালো {name}! 👋\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🔴 Owner এখন busy আছেন\n"
+                    f"⏳ আপনার সমস্যাটি noted হয়েছে\n"
+                    f"🛠️ যত তাড়াতাড়ি সম্ভব fix\n"
+                    f"   করে দেওয়া হবে!\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"অপেক্ষার জন্য ধন্যবাদ! 🙏\n\n"
+                    f"『 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗯𝘆 𝗦𝗵𝗮𝗺𝗶𝗺 𝗕𝗼𝘁 🤖 』"
+                )
+            })
+            print(f"⏰ Auto reply sent (10min timeout): {name}")
+
+
+async def group_reminder_loop(token):
+    """৫ ঘণ্টা পর পর group reminder"""
+    await asyncio.sleep(GROUP_REMINDER_INTERVAL)
+    while True:
+        for gid in list(group_chat_ids):
+            tg_api(token, "sendMessage", {
+                "chat_id": gid,
+                "text": REMINDER_MESSAGE
+            })
+            print(f"🔔 Reminder sent: {gid}")
+        await asyncio.sleep(GROUP_REMINDER_INTERVAL)
 
 
 async def welcome_bot_loop():
@@ -265,61 +450,65 @@ async def welcome_bot_loop():
         print("⚠️ WELCOME_BOT_TOKEN নেই — Welcome bot বন্ধ")
         return
 
-    print("🎉 Welcome Bot চালু হয়েছে!")
+    print("🎉 Welcome Bot চালু!")
     print("🚫 Bad word filter চালু!")
-    print("🗑️ Voice message delete চালু!")
-    print("📢 Owner mention system চালু!")
-    offset = 0
-    base = f"https://api.telegram.org/bot{WELCOME_BOT_TOKEN}"
+    print("🗑️ Voice delete চালু!")
+    print("🆘 Problem tracking চালু!")
+    print("⏰ 10min timeout auto-reply চালু!")
+    print("🔔 Group reminder চালু! (৫ ঘণ্টা)")
 
-    # পুরনো conflict clear করো
-    try:
-        urllib.request.urlopen(
-            f"{base}/getUpdates?offset=-1&limit=1", timeout=10
-        )
-    except Exception:
-        pass
+    # Conflict clear
+    tg_api(WELCOME_BOT_TOKEN, "getUpdates", {"offset": -1, "limit": 1, "timeout": 0})
     await asyncio.sleep(2)
 
+    # Background tasks
+    asyncio.create_task(group_reminder_loop(WELCOME_BOT_TOKEN))
+    asyncio.create_task(pending_problem_timeout_loop(WELCOME_BOT_TOKEN))
+
+    offset = 0
     while True:
         try:
-            url = (
-                f"{base}/getUpdates"
-                f"?offset={offset}&timeout=5"
-                f"&allowed_updates=%5B%22message%22%2C%22chat_member%22%5D"
-            )
-            req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read())
+            result = tg_api(WELCOME_BOT_TOKEN, "getUpdates", {
+                "offset": offset,
+                "timeout": 5,
+                "allowed_updates": ["message", "chat_member"]
+            })
 
-            if not data.get("ok"):
-                await asyncio.sleep(5)
+            if not result.get("ok"):
+                await asyncio.sleep(3)
                 continue
 
-            for update in data.get("result", []):
+            for update in result.get("result", []):
                 offset = update["update_id"] + 1
 
                 msg = update.get("message")
                 if msg:
                     chat_type = msg.get("chat", {}).get("type", "")
+                    sender_id = msg.get("from", {}).get("id")
 
-                    # /start command (private)
-                    if msg.get("text") == "/start" and chat_type == "private":
-                        tg_api(WELCOME_BOT_TOKEN, "sendMessage", {
-                            "chat_id": msg["chat"]["id"],
-                            "text": (
-                                "╔══════════════════╗\n"
-                                "║  🤖 Shamim Bot চালু!  ║\n"
-                                "╚══════════════════╝\n\n"
-                                "✅ সব feature চালু আছে:\n"
-                                "🎉 Welcome message\n"
-                                "🚫 Bad word filter\n"
-                                "🗑️ Voice message delete\n"
-                                "📢 Owner mention system"
-                            )
-                        })
+                    # Owner private message
+                    if chat_type == "private" and sender_id == OWNER_ID:
+                        if not handle_owner_fix(WELCOME_BOT_TOKEN, msg, OWNER_ID):
+                            if msg.get("text") == "/start":
+                                tg_api(WELCOME_BOT_TOKEN, "sendMessage", {
+                                    "chat_id": msg["chat"]["id"],
+                                    "text": (
+                                        "╔══════════════════╗\n"
+                                        "║  🤖 Shamim Bot চালু!  ║\n"
+                                        "╚══════════════════╝\n\n"
+                                        "✅ সব feature চালু:\n"
+                                        "🎉 Welcome message\n"
+                                        "🚫 Bad word filter\n"
+                                        "🗑️ Voice delete\n"
+                                        "🆘 Problem tracking\n"
+                                        "⏰ 10min auto-reply\n"
+                                        "🔔 5hr reminder\n\n"
+                                        "🛠️ Fix format:\n"
+                                        "/fix [user_id] [সমাধান]"
+                                    )
+                                })
 
-                    # Group message handle
+                    # Group message
                     elif chat_type in ["group", "supergroup"]:
                         handle_group_message(WELCOME_BOT_TOKEN, msg, OWNER_ID)
 
@@ -328,12 +517,10 @@ async def welcome_bot_loop():
                 if cm:
                     old_s = cm["old_chat_member"]["status"]
                     new_s = cm["new_chat_member"]["status"]
-                    was_out = old_s in ["left", "kicked"]
-                    is_in = new_s in ["member", "administrator", "creator"]
-
-                    if was_out and is_in:
+                    if old_s in ["left", "kicked"] and new_s in ["member", "administrator", "creator"]:
                         member = cm["new_chat_member"]["user"]
                         chat_id = cm["chat"]["id"]
+                        group_chat_ids.add(chat_id)
                         first = member.get("first_name", "")
                         last = member.get("last_name", "")
                         full_name = (first + " " + last).strip() or "বন্ধু"
@@ -343,10 +530,10 @@ async def welcome_bot_loop():
                             "chat_id": chat_id,
                             "text": WELCOME_MESSAGE.format(name=name)
                         })
-                        print(f"🎉 Welcome: {full_name} → {cm['chat']['title']}")
+                        print(f"🎉 Welcome: {full_name}")
 
         except Exception as e:
-            print(f"⚠️ Welcome loop error: {e}")
+            print(f"⚠️ Loop error: {e}")
 
         await asyncio.sleep(1)
 
@@ -358,10 +545,10 @@ async def main():
     print("🚀 Userbot চালু হচ্ছে...")
     await client.start()
     me = await client.get_me()
-    print(f"✅ Login সফল! Account: {me.first_name} (@{me.username})")
+    print(f"✅ Login: {me.first_name} (@{me.username})")
     print("📨 Auto-reply চালু!")
-    print("🌞 সকাল ১০টা - রাত ১০টা → Busy message")
-    print("🌙 রাত ১০টার পরে → Sleep message")
+    print("🌞 সকাল ১০টা - রাত ১০টা → Busy")
+    print("🌙 রাত ১০টার পরে → Sleep")
     print("💡 ৫ মিনিট idle → bot আবার চালু")
 
     await asyncio.gather(
