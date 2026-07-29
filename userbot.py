@@ -265,9 +265,16 @@ def tg_api(token, method, data):
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode("utf-8")
+            return json.loads(err_body)
+        except Exception:
+            print(f"⚠️ API HTTPError [{method}]: {e}")
+            return {"ok": False, "description": str(e)}
     except Exception as e:
         print(f"⚠️ API error [{method}]: {e}")
-        return {}
+        return {"ok": False, "description": str(e)}
 
 
 def handle_group_message(token, msg, owner_id):
