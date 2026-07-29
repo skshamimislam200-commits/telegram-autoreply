@@ -362,9 +362,10 @@ def handle_group_message(token, msg, owner_id):
                 "text": (
                     f"🆘 নতুন সমস্যা রিপোর্ট!\n"
                     f"━━━━━━━━━━━━━━━━\n"
-                    f"👤 Member: {info['name']}\n"
+                    f"👥 Group: (ID: {chat_id})\n"
+                    f"👤 Member: {info['name']} (ID: {sender_id})\n"
+                    f"📝 Msg ID: {msg_id}\n"
                     f"💬 সমস্যা: {problem_text}\n"
-                    f"🏠 Group ID: {chat_id}\n"
                     f"━━━━━━━━━━━━━━━━\n"
                     f"⏰ ১০ মিনিটে reply না করলে auto msg যাবে\n"
                     f"✏️ Fix: /fix {sender_id} সমাধান"
@@ -399,7 +400,8 @@ def handle_group_message(token, msg, owner_id):
                 f"📢 নতুন প্রশ্ন এসেছে!\n"
                 f"━━━━━━━━━━━━━━━━\n"
                 f"👥 Group: {group_title} (ID: {chat_id})\n"
-                f"👤 Member: {sender_mention}\n"
+                f"👤 Member: {sender_mention} (ID: {sender_id})\n"
+                f"📝 Msg ID: {msg_id}\n"
                 f"💬 প্রশ্ন: {text}\n"
                 f"━━━━━━━━━━━━━━━━"
             )
@@ -414,25 +416,28 @@ def handle_owner_reply_to_notification(token, msg, owner_id):
     replied_text = reply_to.get("text", "") or ""
     import re
 
-    # Parse Group ID and Member ID
-    gid_match = re.search(r"Group ID:\s*(-?\d+)", replied_text) or re.search(r"Group:.*\(ID:\s*(-?\d+)\)", replied_text)
-    uid_match = re.search(r"Fix:\s*/fix\s+(\d+)", replied_text) or re.search(r"Member:.*\(ID:\s*(\d+)\)", replied_text)
+    # Parse Group ID, Member ID, and Msg ID
+    gid_match = re.search(r"Group:.*\(ID:\s*(-?\d+)\)", replied_text) or re.search(r"Group ID:\s*(-?\d+)", replied_text)
+    uid_match = re.search(r"Member:.*\(ID:\s*(\d+)\)", replied_text) or re.search(r"Fix:\s*/fix\s+(\d+)", replied_text)
+    mid_match = re.search(r"Msg ID:\s*(\d+)", replied_text)
 
     if not gid_match:
         return False
 
     gid = int(gid_match.group(1))
     uid = int(uid_match.group(1)) if uid_match else None
+    mid = int(mid_match.group(1)) if mid_match else None
     reply_content = msg.get("text", "")
 
     if uid:
         send_text = (
             f"╔══════════════════════╗\n"
-            f"║   📩  ADMIN REPLY        ║\n"
+            f"║   🛠️  PROBLEM SOLVED!    ║\n"
             f"╚══════════════════════╝\n\n"
-            f"✅ [Member](tg://user?id={uid}) আপনার উত্তর:\n\n"
-            f"💬 {reply_content}\n\n"
+            f"✅ [Member](tg://user?id={uid}) আপনার সমস্যার সমাধান:\n\n"
+            f"💡 {reply_content}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"আর সমস্যা হলে জানাবেন! 😊\n\n"
             f"{BOT_SIGNATURE}"
         )
     else:
@@ -445,11 +450,15 @@ def handle_owner_reply_to_notification(token, msg, owner_id):
             f"{BOT_SIGNATURE}"
         )
 
-    result = tg_api(token, "sendMessage", {
+    payload = {
         "chat_id": gid,
         "text": send_text,
         "parse_mode": "Markdown"
-    })
+    }
+    if mid:
+        payload["reply_to_message_id"] = mid
+
+    result = tg_api(token, "sendMessage", payload)
 
     if result.get("ok"):
         if uid:
