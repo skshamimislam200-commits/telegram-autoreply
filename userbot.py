@@ -45,10 +45,10 @@ OWNER_ID = int(os.getenv("OWNER_ID", "7918793670"))
 GROUP_REMINDER_INTERVAL = 60 * 60  # প্রতি ১ ঘণ্টায় reminder
 OWNER_REPLY_TIMEOUT = 10 * 60      # 10 minutes
 
-# Group active time: সকাল ৯:০০ - রাত ৯:০০
-GROUP_OPEN_HOUR = 9
+# Group active time: সকাল ৮:০০ - রাত ১০:০০
+GROUP_OPEN_HOUR = 8
 GROUP_OPEN_MINUTE = 0
-GROUP_CLOSE_HOUR = 21
+GROUP_CLOSE_HOUR = 22
 GROUP_CLOSE_MINUTE = 0
 
 BOT_SIGNATURE = "[ DEVELOPER SHAMIM ]"
@@ -107,7 +107,7 @@ SLEEP_MESSAGE = (
     "└─────────────────────┘\n\n"
     "🌛 রাতের বিশ্রাম চলছে...\n"
     "━━━━━━━━━━━━━━━━━━━━\n"
-    "⏰ আগামীকাল সকাল ৯:০০ এ\n"
+    "⏰ আগামীকাল সকাল ৮:০০ এ\n"
     "   আপনাকে reply দেওয়া হবে\n"
     "━━━━━━━━━━━━━━━━━━━━\n\n"
     "🌟 শুভ রাত্রি! ভালো থাকুন 🙏\n\n"
@@ -161,6 +161,7 @@ idle_timers: dict = {}
 problem_tracking: dict = {}
 pending_problems: dict = {}
 group_chat_ids: set = load_group_chats()
+manually_unlocked_groups: set = set()
 
 # Env থেকে গ্রুপ আইডি লোড করা (সার্ভার রিস্টার্ট হলেও যাতে গ্রুপ আইডি হারিয়ে না যায়)
 env_group_ids = os.getenv("GROUP_CHAT_IDS", "")
@@ -196,8 +197,6 @@ def contains_bad_word(text: str) -> bool:
         if word.lower() in text_lower:
             return True
     return False
-
-
 async def reactivate_bot(user_id):
     await asyncio.sleep(WAIT_SECONDS)
     owner_replied.discard(user_id)
@@ -255,6 +254,11 @@ async def incoming_handler(event):
 
 @client.on(events.NewMessage(outgoing=True, func=lambda e: e.is_private))
 async def outgoing_handler(event):
+    # If the outgoing message is the bot's own auto-reply, ignore it so it doesn't reset the cooldown
+    text = event.text or ""
+    if text == BUSY_MESSAGE or text == SLEEP_MESSAGE:
+        return
+
     chat = await event.get_chat()
     receiver_id = chat.id
     owner_replied.add(receiver_id)
@@ -313,6 +317,67 @@ def handle_group_message(token, msg, owner_id):
         text_clean = text.strip().lower()
         # Handle command autocomplete with bot username (e.g. /kick@botname -> /kick)
         base_cmd = text_clean.split("@")[0]
+
+        if base_cmd in ["/open", "/unlock"] and sender_id == owner_id:
+            result = tg_api(token, "setChatPermissions", {
+                "chat_id": chat_id,
+                "permissions": {
+                    "can_send_messages": True,
+                    "can_send_audios": True,
+                    "can_send_documents": True,
+                    "can_send_photos": True,
+                    "can_send_videos": True,
+                    "can_send_video_notes": True,
+                    "can_send_voice_notes": False,
+                    "can_send_polls": True,
+                    "can_send_other_messages": True,
+                    "can_add_web_page_previews": True
+                }
+            })
+            if result.get("ok"):
+                manually_unlocked_groups.add(chat_id)
+                tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+                tg_api(token, "sendMessage", {
+                    "chat_id": chat_id,
+                    "text": (
+                        f"🔓 ওনার কর্তৃক গ্রুপ সাময়িকভাবে খুলে দেওয়া হয়েছে!\n"
+                        f"━━━━━━━━━━━━━━━━━━━━\n"
+                        f"💬 এখন আপনারা চ্যাট করতে পারবেন।\n\n"
+                        f"{BOT_SIGNATURE}"
+                    )
+                })
+            return
+
+        if base_cmd in ["/close", "/lock"] and sender_id == owner_id:
+            result = tg_api(token, "setChatPermissions", {
+                "chat_id": chat_id,
+                "permissions": {
+                    "can_send_messages": False,
+                    "can_send_audios": False,
+                    "can_send_documents": False,
+                    "can_send_photos": False,
+                    "can_send_videos": False,
+                    "can_send_video_notes": False,
+                    "can_send_voice_notes": False,
+                    "can_send_polls": False,
+                    "can_send_other_messages": False,
+                    "can_add_web_page_previews": False
+                }
+            })
+            if result.get("ok"):
+                manually_unlocked_groups.discard(chat_id)
+                tg_api(token, "deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+                tg_api(token, "sendMessage", {
+                    "chat_id": chat_id,
+                    "text": (
+                        f"🔒 ওনার কর্তৃক গ্রুপ বন্ধ করা হয়েছে!\n"
+                        f"━━━━━━━━━━━━━━━━━━━━\n"
+                        f"⏰ পরবর্তী সময় অনুযায়ী আবার গ্রুপ খোলা হবে।\n\n"
+                        f"{BOT_SIGNATURE}"
+                    )
+                })
+            return
+
         if base_cmd in ["/del", "/kick", "/ban"]:
             reply_to_msg = msg.get("reply_to_message")
             print(f"🔍 Admin command detected: {base_cmd} (full: {text_clean}) from {sender_name} ({sender_id}) in chat {chat_id}. Reply msg exists: {bool(reply_to_msg)}")
@@ -567,6 +632,89 @@ def handle_owner_reply_to_notification(token, msg, owner_id):
 def handle_owner_admin_commands(token, msg, owner_id):
     text = msg.get("text", "") or ""
     text_clean = text.strip().lower()
+
+    # ০. /open বা /unlock এবং /close বা /lock ম্যানুয়াল ওভাররাইড
+    if text_clean in ["/open", "/unlock"]:
+        if not group_chat_ids:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "⚠️ কোনো সচল গ্রুপ পাওয়া যায়নি!"})
+            return True
+
+        success_count = 0
+        for gid in list(group_chat_ids):
+            result = tg_api(token, "setChatPermissions", {
+                "chat_id": gid,
+                "permissions": {
+                    "can_send_messages": True,
+                    "can_send_audios": True,
+                    "can_send_documents": True,
+                    "can_send_photos": True,
+                    "can_send_videos": True,
+                    "can_send_video_notes": True,
+                    "can_send_voice_notes": False,
+                    "can_send_polls": True,
+                    "can_send_other_messages": True,
+                    "can_add_web_page_previews": True
+                }
+            })
+            if result.get("ok"):
+                manually_unlocked_groups.add(gid)
+                success_count += 1
+                tg_api(token, "sendMessage", {
+                    "chat_id": gid,
+                    "text": (
+                        f"🔓 ওনার কর্তৃক গ্রুপ সাময়িকভাবে খুলে দেওয়া হয়েছে!\n"
+                        f"━━━━━━━━━━━━━━━━━━━━\n"
+                        f"💬 এখন আপনারা চ্যাট করতে পারবেন।\n\n"
+                        f"{BOT_SIGNATURE}"
+                    )
+                })
+
+        tg_api(token, "sendMessage", {
+            "chat_id": owner_id,
+            "text": f"🔓 {success_count}টি গ্রুপ সাময়িকভাবে আনলক করা হয়েছে! বট রাতে এটিকে আর অটো-লক করবে না।"
+        })
+        return True
+
+    if text_clean in ["/close", "/lock"]:
+        if not group_chat_ids:
+            tg_api(token, "sendMessage", {"chat_id": owner_id, "text": "⚠️ কোনো সচল গ্রুপ পাওয়া যায়নি!"})
+            return True
+
+        success_count = 0
+        for gid in list(group_chat_ids):
+            result = tg_api(token, "setChatPermissions", {
+                "chat_id": gid,
+                "permissions": {
+                    "can_send_messages": False,
+                    "can_send_audios": False,
+                    "can_send_documents": False,
+                    "can_send_photos": False,
+                    "can_send_videos": False,
+                    "can_send_video_notes": False,
+                    "can_send_voice_notes": False,
+                    "can_send_polls": False,
+                    "can_send_other_messages": False,
+                    "can_add_web_page_previews": False
+                }
+            })
+            if result.get("ok"):
+                manually_unlocked_groups.discard(gid)
+                success_count += 1
+                tg_api(token, "sendMessage", {
+                    "chat_id": gid,
+                    "text": (
+                        f"🔒 ওনার কর্তৃক গ্রুপ বন্ধ করা হয়েছে!\n"
+                        f"━━━━━━━━━━━━━━━━━━━━\n"
+                        f"⏰ পরবর্তী সময় অনুযায়ী আবার গ্রুপ খোলা হবে।\n\n"
+                        f"{BOT_SIGNATURE}"
+                    )
+                })
+
+        tg_api(token, "sendMessage", {
+            "chat_id": owner_id,
+            "text": f"🔒 {success_count}টি গ্রুপ লক করা হয়েছে!"
+        })
+        return True
 
     # ১. /unpin command: গ্রুপগুলোর পিন করা মেসেজ আনপিন করো
     if text_clean == "/unpin":
@@ -892,7 +1040,7 @@ async def reminder_loop(token):
                     "━━━━━━━━━━━━━━━━━━━━\n"
                     "😴 Admin এখন ঘুমাতে যাচ্ছেন\n"
                     "🔒 Group এখন বন্ধ হচ্ছে\n"
-                    "⏰ সকাল ৯:০০ এ আবার চালু হবে\n"
+                    "⏰ সকাল ৮:০০ এ আবার চালু হবে\n"
                     "━━━━━━━━━━━━━━━━━━━━\n\n"
                     "❓ কারো কোনো সমস্যা থাকলে\n"
                     "💬 কাল সকালে জানাবেন\n"
@@ -913,8 +1061,8 @@ async def reminder_loop(token):
 
 
 async def group_lock_unlock_loop(token):
-    """রাত ৯:০০ এ group lock, সকাল ৯:০০ এ unlock
-    Owner আগে open করলেও bot বন্ধ করে দেবে"""
+    """রাত ১০:০০ এ group lock, সকাল ৮:০০ এ unlock (একবারই করবে, বার বার চেক করবে না)"""
+    locked_today = set()
     unlocked_today = set()
     print("⏰ Group lock/unlock loop started!")
 
@@ -924,98 +1072,85 @@ async def group_lock_unlock_loop(token):
         close_time = now.replace(hour=GROUP_CLOSE_HOUR, minute=GROUP_CLOSE_MINUTE, second=0, microsecond=0)
 
         is_night = not (open_time <= now < close_time)  # রাতের সময়
+        today_str = now.strftime("%Y-%m-%d")
 
         if is_night:
-            # রাতের সময় → সব গ্রুপ লক রাখতে হবে
+            # রাতের সময় → আনলক সেট ক্লিয়ার করো
             if unlocked_today:
-                print("🌙 Night time started, clearing unlocked_today set.")
                 unlocked_today.clear()
 
+            # সব গ্রুপ লক করো (যদি আজ রাতে এখনও লক না করা হয়ে থাকে)
             for gid in list(group_chat_ids):
-                chat_info = tg_api(token, "getChat", {"chat_id": gid})
-                if chat_info.get("ok"):
-                    chat_res = chat_info.get("result", {})
-                    perms = chat_res.get("permissions") or {}
-
-                    # যদি can_send_messages True থাকে (তার মানে গ্রুপ আনলক), তবে লক করো
-                    if perms.get("can_send_messages", True):
-                        print(f"🔒 Group {gid} is unlocked at night! Locking it now...")
-                        result = tg_api(token, "setChatPermissions", {
-                            "chat_id": gid,
-                            "permissions": {
-                                "can_send_messages": False,
-                                "can_send_audios": False,
-                                "can_send_documents": False,
-                                "can_send_photos": False,
-                                "can_send_videos": False,
-                                "can_send_video_notes": False,
-                                "can_send_voice_notes": False,
-                                "can_send_polls": False,
-                                "can_send_other_messages": False,
-                                "can_add_web_page_previews": False
-                            }
-                        })
-                        if result.get("ok"):
-                            print(f"🔒 Group auto-locked (night): {gid}")
-                        else:
-                            print(f"⚠️ Failed to lock group {gid}: {result}")
-                else:
-                    print(f"⚠️ Failed to getChat for {gid} at night: {chat_info}")
-        else:
-            # দিনের সময় → আনলক করো (যদি আজ এখনও আনলক করা না হয়ে থাকে)
-            for gid in list(group_chat_ids):
-                if gid not in unlocked_today:
-                    print(f"🌅 Checking group {gid} for morning unlock...")
-                    chat_info = tg_api(token, "getChat", {"chat_id": gid})
-                    if chat_info.get("ok"):
-                        chat_res = chat_info.get("result", {})
-                        perms = chat_res.get("permissions") or {}
-                        can_send = perms.get("can_send_messages", True)
-
-                        if not can_send:
-                            print(f"🔓 Group {gid} is locked during the day. Unlocking it now...")
-                            open_msg = (
-                                "╔══════════════════════╗\n"
-                                "║   🌅  GOOD MORNING!      ║\n"
-                                "╚══════════════════════╝\n\n"
-                                "হ্যালো সবাই! 👋 শুভ সকাল! ☀️\n\n"
-                                "━━━━━━━━━━━━━━━━━━━━\n"
-                                "🔓 Group আবার চালু হয়েছে!\n"
-                                "✅ Admin এখন active আছেন\n"
-                                "💬 এখন message করতে পারবেন\n"
-                                "━━━━━━━━━━━━━━━━━━━━\n\n"
-                                "❓ কারো কোনো সমস্যা আছে?\n"
-                                "💬 নির্দ্বিধায় জানান\n"
-                                "🛠️ সমাধান করে দেওয়া হবে!\n\n"
-                                "━━━━━━━━━━━━━━━━━━━━\n"
-                                f"{BOT_SIGNATURE}"
-                            )
-                            result = tg_api(token, "setChatPermissions", {
-                                "chat_id": gid,
-                                "permissions": {
-                                    "can_send_messages": True,
-                                    "can_send_audios": True,
-                                    "can_send_documents": True,
-                                    "can_send_photos": True,
-                                    "can_send_videos": True,
-                                    "can_send_video_notes": True,
-                                    "can_send_voice_notes": False,
-                                    "can_send_polls": True,
-                                    "can_send_other_messages": True,
-                                    "can_add_web_page_previews": True
-                                }
-                            })
-                            if result.get("ok"):
-                                tg_api(token, "sendMessage", {"chat_id": gid, "text": open_msg})
-                                print(f"🔓 Group unlocked (morning): {gid}")
-                                unlocked_today.add(gid)
-                            else:
-                                print(f"⚠️ Failed to unlock group {gid}: {result}")
-                        else:
-                            print(f"ℹ️ Group {gid} is already unlocked.")
-                            unlocked_today.add(gid)
+                lock_key = f"{gid}_{today_str}"
+                if lock_key not in locked_today:
+                    print(f"🔒 Locking group {gid} for the night...")
+                    result = tg_api(token, "setChatPermissions", {
+                        "chat_id": gid,
+                        "permissions": {
+                            "can_send_messages": False,
+                            "can_send_audios": False,
+                            "can_send_documents": False,
+                            "can_send_photos": False,
+                            "can_send_videos": False,
+                            "can_send_video_notes": False,
+                            "can_send_voice_notes": False,
+                            "can_send_polls": False,
+                            "can_send_other_messages": False,
+                            "can_add_web_page_previews": False
+                        }
+                    })
+                    if result.get("ok"):
+                        locked_today.add(lock_key)
+                        print(f"🔒 Group auto-locked (night): {gid}")
                     else:
-                        print(f"⚠️ Failed to getChat for {gid} during day: {chat_info}")
+                        print(f"⚠️ Failed to lock group {gid}: {result}")
+        else:
+            # দিনের সময় → লক সেট ক্লিয়ার করো
+            if locked_today:
+                locked_today.clear()
+
+            # সব গ্রুপ আনলক করো (যদি আজ সকালে এখনও আনলক না করা হয়ে থাকে)
+            for gid in list(group_chat_ids):
+                unlock_key = f"{gid}_{today_str}"
+                if unlock_key not in unlocked_today:
+                    print(f"🔓 Unlocking group {gid} for the day...")
+                    open_msg = (
+                        "╔══════════════════════╗\n"
+                        "║   🌅  GOOD MORNING!      ║\n"
+                        "╚══════════════════════╝\n\n"
+                        "হ্যালো সবাই! 👋 শুভ সকাল! ☀️\n\n"
+                        "━━━━━━━━━━━━━━━━━━━━\n"
+                        "🔓 Group আবার চালু হয়েছে!\n"
+                        "✅ Admin এখন active আছেন\n"
+                        "💬 এখন message করতে পারবেন\n"
+                        "━━━━━━━━━━━━━━━━━━━━\n\n"
+                        "❓ কারো কোনো সমস্যা আছে?\n"
+                        "💬 নির্দ্বিধায় জানান\n"
+                        "🛠️ সমাধান করে দেওয়া হবে!\n\n"
+                        "━━━━━━━━━━━━━━━━━━━━\n"
+                        f"{BOT_SIGNATURE}"
+                    )
+                    result = tg_api(token, "setChatPermissions", {
+                        "chat_id": gid,
+                        "permissions": {
+                            "can_send_messages": True,
+                            "can_send_audios": True,
+                            "can_send_documents": True,
+                            "can_send_photos": True,
+                            "can_send_videos": True,
+                            "can_send_video_notes": True,
+                            "can_send_voice_notes": False,
+                            "can_send_polls": True,
+                            "can_send_other_messages": True,
+                            "can_add_web_page_previews": True
+                        }
+                    })
+                    if result.get("ok"):
+                        tg_api(token, "sendMessage", {"chat_id": gid, "text": open_msg})
+                        unlocked_today.add(unlock_key)
+                        print(f"🔓 Group unlocked (morning): {gid}")
+                    else:
+                        print(f"⚠️ Failed to unlock group {gid}: {result}")
 
         await asyncio.sleep(30)
 
@@ -1024,9 +1159,9 @@ async def welcome_bot_loop():
     if not WELCOME_BOT_TOKEN:
         print("⚠️ WELCOME_BOT_TOKEN নেই")
         return
-    print("🎉 Welcome Bot চালু!")
-    print("🚫 Bad word filter চালু!")
-    print("🗑️ Voice delete চালু!")
+    print("🎉 Welcome Bot चालू!")
+    print("🚫 Bad word filter चालू!")
+    print("🗑️ Voice delete चालू!")
     print("🆘 Problem tracking চালু!")
     print("⏰ 10min timeout চালু!")
     print("🔔 Hourly reminder চালু!")
@@ -1056,6 +1191,7 @@ async def welcome_bot_loop():
                 if msg:
                     ctype = msg.get("chat", {}).get("type", "")
                     sid = msg.get("from", {}).get("id")
+                    
                     if ctype == "private" and sid == OWNER_ID:
                         if not handle_owner_admin_commands(WELCOME_BOT_TOKEN, msg, OWNER_ID):
                             if not handle_owner_reply_to_notification(WELCOME_BOT_TOKEN, msg, OWNER_ID):
@@ -1075,7 +1211,7 @@ async def welcome_bot_loop():
                                                     "🆘 Problem tracking\n"
                                                     "⏰ 10min auto-reply\n"
                                                     "🔔 Hourly reminder\n"
-                                                    "🔒 Group lock 9:00PM-9:00AM\n\n"
+                                                    "🔒 Group lock 10:00PM-8:00AM\n\n"
                                                     "🛠️ Fix format:\n"
                                                     "/fix [user_id] [সমাধান]\n\n"
                                                     f"{BOT_SIGNATURE}"
@@ -1117,8 +1253,8 @@ async def main():
     me = await client.get_me()
     print(f"✅ Login: {me.first_name} (@{me.username})")
     print("📨 Auto-reply চালু!")
-    print("🌞 সকাল ৯:০০ - রাত ৯:০০ → Busy message")
-    print("🌙 রাত ৯:০০ এর পরে → Sleep message")
+    print("🌞 সকাল ৮:০০ - রাত ১০:০০ → Busy message")
+    print("🌙 রাত ১০:০০ এর পরে → Sleep message")
     print("💡 ৫ মিনিট idle → bot আবার চালু")
     await asyncio.gather(
         client.run_until_disconnected(),
